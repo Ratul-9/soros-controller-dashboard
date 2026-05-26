@@ -111,13 +111,13 @@ async function apiFetch<T>(endpoint: string, options: RequestInit = {}): Promise
     throw new Error('API not configured')
   }
 
-  const url = `${config.backendUrl}${endpoint}`
+  const separator = endpoint.includes('?') ? '&' : '?'
+  const url = `${config.backendUrl}${endpoint}${separator}ngrok-skip-browser-warning=true`
   const response = await fetch(url, {
     ...options,
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${config.secret}`,
-      'ngrok-skip-browser-warning': 'true',
       ...options.headers,
     },
   })
