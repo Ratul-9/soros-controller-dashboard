@@ -106,18 +106,13 @@ export function clearApiConfig(): void {
 }
 
 async function apiFetch<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
-  const config = getApiConfig()
-  if (!config) {
-    throw new Error('API not configured')
-  }
-
-  const separator = endpoint.includes('?') ? '&' : '?'
-  const url = `${config.backendUrl}${endpoint}${separator}ngrok-skip-browser-warning=true`
+  // Route through the Next.js proxy — avoids CORS and ngrok interstitial entirely.
+  // The proxy adds Authorization and ngrok-skip-browser-warning server-side.
+  const url = `/api/proxy${endpoint}`
   const response = await fetch(url, {
     ...options,
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${config.secret}`,
       ...options.headers,
     },
   })
