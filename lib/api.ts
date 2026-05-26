@@ -117,6 +117,7 @@ async function apiFetch<T>(endpoint: string, options: RequestInit = {}): Promise
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${config.secret}`,
+      'ngrok-skip-browser-warning': 'true',
       ...options.headers,
     },
   })
