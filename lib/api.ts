@@ -106,14 +106,21 @@ export function clearApiConfig(): void {
 }
 
 async function apiFetch<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
-  // Route through the Next.js proxy — avoids CORS and ngrok interstitial entirely.
-  // The proxy adds Authorization and ngrok-skip-browser-warning server-side.
+  const config = getApiConfig()
+  if (!config) throw new Error('API not configured')
+
+  // All requests go through the Next.js proxy route (/api/proxy/...).
+  // The proxy runs server-side so there is no CORS preflight and no ngrok
+  // browser-warning interstitial. We pass the backend URL + secret as headers
+  // so the proxy can forward them without needing Vercel env vars.
   const url = `/api/proxy${endpoint}`
   const response = await fetch(url, {
     ...options,
     headers: {
-      'Content-Type': 'application/json',
-      ...options.headers,
+      'content-type':      'application/json',
+      'x-backend-url':     config.backendUrl,
+      'x-backend-secret':  config.secret,
+      ...(options.headers as Record<string, string>),
     },
   })
 

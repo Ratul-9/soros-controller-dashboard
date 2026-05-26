@@ -1,26 +1,30 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-// Set these on Vercel: Settings → Environment Variables
-const BACKEND_URL    = process.env.BACKEND_URL?.replace(/\/$/, '')
-const BACKEND_SECRET = process.env.BACKEND_SECRET
-
 async function handler(
   req: NextRequest,
   { params }: { params: Promise<{ path: string[] }> }
 ) {
-  if (!BACKEND_URL || !BACKEND_SECRET) {
+  // Prefer server-side env vars; fall back to headers sent by the browser client
+  // (the client reads these from localStorage where the user stored the config).
+  const backendUrl = (
+    process.env.BACKEND_URL?.replace(/\/$/, '') ||
+    req.headers.get('x-backend-url')?.replace(/\/$/, '')
+  )
+  const secret = (
+    process.env.BACKEND_SECRET ||
+    req.headers.get('x-backend-secret')
+  )
+
+  if (!backendUrl || !secret) {
     return NextResponse.json(
-      {
-        error: 'Backend not configured on server',
-        fix: 'Add BACKEND_URL and BACKEND_SECRET to Vercel environment variables',
-      },
+      { error: 'Backend not configured — set BACKEND_URL + BACKEND_SECRET on Vercel, or configure the dashboard via the setup screen.' },
       { status: 503 }
     )
   }
 
   const { path } = await params
   const search    = req.nextUrl.search
-  const target    = `${BACKEND_URL}/api/${path.join('/')}${search}`
+  const target    = `${backendUrl}/api/${path.join('/')}${search}`
 
   const body =
     req.method !== 'GET' && req.method !== 'HEAD'
@@ -32,8 +36,8 @@ async function handler(
     upstream = await fetch(target, {
       method:  req.method,
       headers: {
-        'Content-Type':                'application/json',
-        'Authorization':               `Bearer ${BACKEND_SECRET}`,
+        'content-type':                'application/json',
+        'authorization':               `Bearer ${secret}`,
         'ngrok-skip-browser-warning':  'true',
       },
       body,
