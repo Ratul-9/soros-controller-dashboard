@@ -14,7 +14,7 @@ interface SetupModalProps {
 }
 
 export function SetupModal({ open, onConfigured }: SetupModalProps) {
-  const [backendUrl, setBackendUrl] = useState('http://localhost:9090')
+  const [backendUrl, setBackendUrl] = useState('')
   const [secret, setSecret] = useState('')
   const [status, setStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle')
   const [errorMessage, setErrorMessage] = useState('')
@@ -65,7 +65,7 @@ export function SetupModal({ open, onConfigured }: SetupModalProps) {
               id="backend-url"
               value={backendUrl}
               onChange={(e) => setBackendUrl(e.target.value)}
-              placeholder="http://BACKEND_IP:9090"
+              placeholder="http://YOUR_VM_IP:9090"
               className="font-mono text-sm bg-secondary border-border"
             />
           </div>
