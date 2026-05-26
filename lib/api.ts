@@ -52,12 +52,14 @@ export interface Game {
 }
 
 export interface Player {
-  id: number
+  id: string
+  userId: string
   name: string
-  role: 'Doctor' | 'Detective' | 'Bodyguard' | 'Mayor' | 'Commoner' | 'MafiaLeader' | 'SilencerMafia' | 'VanillaMafia'
-  faction: 'TOWN' | 'MAFIA'
+  role: 'Doctor' | 'Detective' | 'Bodyguard' | 'Mayor' | 'Commoner' | 'MafiaLeader' | 'SilencerMafia' | 'VanillaMafia' | null
+  faction: 'TOWN' | 'MAFIA' | null
   status: 'Alive' | 'Eliminated' | 'Resurrected' | 'DeadForever'
   lifetimeSteps: number
+  activeSteps: number
   mayorRevealed: boolean
 }
 
@@ -105,6 +107,30 @@ export function clearApiConfig(): void {
   localStorage.removeItem(CONFIG_KEY)
 }
 
+interface RawGame {
+  id: string
+  status: string
+  phase: string
+  dayNumber: number
+  playerCount: number
+  capacity: number
+  winner?: string | null
+  createdAt?: string
+}
+
+function mapGame(g: RawGame): Game {
+  return {
+    id:         g.id,
+    status:     g.status as Game['status'],
+    phase:      g.phase  as Game['phase'],
+    day:        g.dayNumber,
+    players:    g.playerCount,
+    maxPlayers: g.capacity,
+    winner:     g.winner as Game['winner'],
+    createdAt:  g.createdAt,
+  }
+}
+
 async function apiFetch<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
   const config = getApiConfig()
   if (!config) throw new Error('API not configured')
@@ -147,11 +173,13 @@ export async function getConfig(): Promise<GameConfig> {
 }
 
 export async function getGames(): Promise<Game[]> {
-  return apiFetch<Game[]>('/api/games')
+  const res = await apiFetch<{ games: RawGame[] }>('/api/games')
+  return res.games.map(mapGame)
 }
 
 export async function getGame(gameId: string): Promise<Game> {
-  return apiFetch<Game>(`/api/games/${gameId}`)
+  const raw = await apiFetch<RawGame>(`/api/games/${gameId}`)
+  return mapGame(raw)
 }
 
 export async function createGame(): Promise<Game> {
@@ -159,7 +187,8 @@ export async function createGame(): Promise<Game> {
 }
 
 export async function getPlayers(gameId: string): Promise<Player[]> {
-  return apiFetch<Player[]>(`/api/games/${gameId}/players`)
+  const res = await apiFetch<{ gameId: string; players: (Omit<Player, 'name'> & { displayName: string })[] }>(`/api/games/${gameId}/players`)
+  return res.players.map(p => ({ ...p, name: p.displayName }))
 }
 
 export async function getTally(gameId: string): Promise<GameTally> {
