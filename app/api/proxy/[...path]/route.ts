@@ -24,7 +24,8 @@ async function handler(
 
   const { path } = await params
   const search    = req.nextUrl.search
-  const target    = `${backendUrl}/api/${path.join('/')}${search}`
+  // path already contains 'api' since the client calls /api/proxy/api/status etc.
+  const target    = `${backendUrl}/${path.join('/')}${search}`
 
   const body =
     req.method !== 'GET' && req.method !== 'HEAD'
