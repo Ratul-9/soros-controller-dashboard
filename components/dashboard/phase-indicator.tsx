@@ -39,6 +39,10 @@ const phaseConfig = {
 
 export function PhaseIndicator({ phase, className }: PhaseIndicatorProps) {
   const config = phaseConfig[phase]
+  // Guard against unknown phase strings
+  if (!config) {
+    return <span className={cn("text-xs text-muted-foreground px-2 py-0.5 rounded", className)}>{phase}</span>
+  }
   const Icon = config.icon
 
   return (

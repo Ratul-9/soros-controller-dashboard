@@ -34,6 +34,10 @@ const statusConfig = {
 
 export function PlayerStatusBadge({ status, className }: PlayerStatusBadgeProps) {
   const config = statusConfig[status]
+  // Guard against unknown status strings
+  if (!config) {
+    return <span className={cn("text-sm text-muted-foreground", className)}>{status}</span>
+  }
   const Icon = config.icon
 
   return (

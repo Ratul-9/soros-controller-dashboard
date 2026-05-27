@@ -25,6 +25,9 @@ const statusConfig = {
 
 export function StatusBadge({ status, className }: StatusBadgeProps) {
   const config = statusConfig[status]
+  if (!config) {
+    return <span className={cn("inline-flex items-center px-2 py-0.5 rounded text-xs font-medium text-muted-foreground", className)}>{status}</span>
+  }
 
   return (
     <span

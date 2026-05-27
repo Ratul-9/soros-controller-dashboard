@@ -107,6 +107,40 @@ export function clearApiConfig(): void {
   localStorage.removeItem(CONFIG_KEY)
 }
 
+// =============================================================================
+// Backend → frontend normalisation maps
+//
+// The C++ toString() helpers emit SCREAMING_SNAKE_CASE.
+// All badge components use PascalCase keys, so we normalise here once
+// instead of touching every component.
+// =============================================================================
+
+const PHASE_MAP: Record<string, Game['phase']> = {
+  PRE_GAME:         'PreGame',
+  MORNING:          'Morning',
+  NIGHT:            'Night',
+  NIGHT_RESOLUTION: 'NightResolution',
+  POST_GAME:        'PostGame',
+}
+
+const ROLE_MAP: Record<string, Player['role']> = {
+  DOCTOR:         'Doctor',
+  DETECTIVE:      'Detective',
+  BODYGUARD:      'Bodyguard',
+  MAYOR:          'Mayor',
+  COMMONER:       'Commoner',
+  MAFIA_LEADER:   'MafiaLeader',
+  SILENCER_MAFIA: 'SilencerMafia',
+  VANILLA_MAFIA:  'VanillaMafia',
+}
+
+const PLAYER_STATUS_MAP: Record<string, Player['status']> = {
+  ALIVE:        'Alive',
+  ELIMINATED:   'Eliminated',
+  RESURRECTED:  'Resurrected',
+  DEAD_FOREVER: 'DeadForever',
+}
+
 interface RawGame {
   id: string
   status: string
@@ -122,13 +156,25 @@ function mapGame(g: RawGame): Game {
   return {
     id:         g.id,
     status:     g.status as Game['status'],
-    phase:      g.phase  as Game['phase'],
+    phase:      PHASE_MAP[g.phase] ?? g.phase as Game['phase'],
     day:        g.dayNumber,
     players:    g.playerCount,
     maxPlayers: g.capacity,
     winner:     g.winner as Game['winner'],
     createdAt:  g.createdAt,
   }
+}
+
+interface RawPlayer {
+  id: string
+  userId: number
+  displayName: string
+  role: string | null
+  faction: string | null
+  status: string
+  lifetimeSteps: number
+  activeSteps: number
+  mayorRevealed: boolean
 }
 
 // Maps dashboard ActionType → backend action type string
@@ -201,8 +247,18 @@ export async function createGame(): Promise<Game> {
 }
 
 export async function getPlayers(gameId: string): Promise<Player[]> {
-  const res = await apiFetch<{ gameId: string; players: (Omit<Player, 'name'> & { displayName: string })[] }>(`/api/games/${gameId}/players`)
-  return res.players.map(p => ({ ...p, name: p.displayName }))
+  const res = await apiFetch<{ gameId: string; players: RawPlayer[] }>(`/api/games/${gameId}/players`)
+  return res.players.map(p => ({
+    id:            p.id,
+    userId:        String(p.userId),
+    name:          p.displayName,
+    role:          p.role != null ? (ROLE_MAP[p.role] ?? null) : null,
+    faction:       (p.faction as Player['faction']) ?? null,
+    status:        PLAYER_STATUS_MAP[p.status] ?? p.status as Player['status'],
+    lifetimeSteps: p.lifetimeSteps,
+    activeSteps:   p.activeSteps,
+    mayorRevealed: p.mayorRevealed,
+  }))
 }
 
 interface RawTally {

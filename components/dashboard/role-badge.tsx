@@ -51,7 +51,25 @@ const roleConfig = {
 }
 
 export function RoleBadge({ role, className }: RoleBadgeProps) {
+  // Role is null in LOBBY (not yet assigned) — render a placeholder
+  if (!role) {
+    return (
+      <span className={cn("inline-flex items-center gap-1.5 text-sm text-muted-foreground", className)}>
+        —
+      </span>
+    )
+  }
+
   const config = roleConfig[role]
+  // Guard against any unrecognised string from the backend
+  if (!config) {
+    return (
+      <span className={cn("inline-flex items-center gap-1.5 text-sm text-muted-foreground", className)}>
+        {role}
+      </span>
+    )
+  }
+
   const Icon = config.icon
 
   return (

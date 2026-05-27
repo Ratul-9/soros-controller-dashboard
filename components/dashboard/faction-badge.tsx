@@ -7,14 +7,23 @@ interface FactionBadgeProps {
 }
 
 export function FactionBadge({ faction, className }: FactionBadgeProps) {
+  // Faction is null in LOBBY (roles not yet assigned)
+  if (!faction) {
+    return (
+      <span className={cn("inline-flex items-center px-2 py-0.5 rounded text-xs font-bold text-muted-foreground", className)}>
+        —
+      </span>
+    )
+  }
+
   const isTown = faction === 'TOWN'
 
   return (
     <span
       className={cn(
         "inline-flex items-center px-2 py-0.5 rounded text-xs font-bold uppercase tracking-wider",
-        isTown 
-          ? "bg-town/20 text-town border border-town/30" 
+        isTown
+          ? "bg-town/20 text-town border border-town/30"
           : "bg-mafia/20 text-mafia border border-mafia/30",
         className
       )}
