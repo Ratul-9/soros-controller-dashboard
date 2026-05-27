@@ -17,25 +17,27 @@ export interface ServerStatus {
 
 export interface GameConfig {
   match_shape: {
-    min_players: number
-    max_players: number
-    mafia_ratio: number
+    player_count: number    // total slots (min = max = this value)
+    mafia_count: number
+    mafia_ratio: number     // 0–1 fraction
+    duration_days: number
   }
-  role_distribution: {
-    [key: string]: number
+  role_distribution: {      // PascalCase role name → count
+    [role: string]: number
   }
   phase_timing: {
-    morning_start: number
+    morning_start: number           // 0–23 hour
     night_start: number
     night_resolution_start: number
+    timezone: string
   }
   step_thresholds: {
-    town_win: number
-    mafia_win: number
+    power_use: number       // steps required to unlock special powers
+    resurrection: number    // steps required for resurrection
   }
   voting_rules: {
-    min_votes_to_eliminate: number
-    mayor_vote_weight: number
+    vote_power_per_step: number    // fractional vote power per step
+    mayor_vote_multiplier: number  // Mayor's bonus multiplier
   }
   win_condition: string
 }
@@ -226,8 +228,88 @@ export async function getStatus(): Promise<ServerStatus> {
   return apiFetch<ServerStatus>('/api/status')
 }
 
+interface RawConfig {
+  rules: {
+    durationDays: number
+    playerCount: number
+    mafiaCount: number
+    roles: {
+      mafiaLeader: number
+      silencerMafia: number
+      vanillaMafia: number
+      doctor: number
+      detective: number
+      bodyguard: number
+      mayor: number
+      commoner: number
+    }
+    phases: {
+      morningStartHour: number
+      nightStartHour: number
+      nightResolutionHour: number
+      timezone: string
+    }
+    steps: {
+      powerUseThreshold: number
+      resurrectionThreshold: number
+    }
+    voting: {
+      votePowerPerStep: number
+      mayorVoteMultiplier: number
+    }
+    winCondition: {
+      earlyEndIfFactionWiped: boolean
+    }
+  }
+  network: {
+    wsPort: number
+    dashboardPort: number
+    prismaBaseUrl: string
+  }
+  notifications: {
+    fcmEnabled: boolean
+    eventHistoryDays: number
+  }
+}
+
 export async function getConfig(): Promise<GameConfig> {
-  return apiFetch<GameConfig>('/api/config')
+  const raw = await apiFetch<RawConfig>('/api/config')
+  const r = raw.rules
+  return {
+    match_shape: {
+      player_count:  r.playerCount,
+      mafia_count:   r.mafiaCount,
+      mafia_ratio:   r.playerCount > 0 ? r.mafiaCount / r.playerCount : 0,
+      duration_days: r.durationDays,
+    },
+    role_distribution: {
+      Doctor:        r.roles.doctor,
+      Detective:     r.roles.detective,
+      Bodyguard:     r.roles.bodyguard,
+      Mayor:         r.roles.mayor,
+      Commoner:      r.roles.commoner,
+      MafiaLeader:   r.roles.mafiaLeader,
+      SilencerMafia: r.roles.silencerMafia,
+      VanillaMafia:  r.roles.vanillaMafia,
+    },
+    phase_timing: {
+      morning_start:          r.phases.morningStartHour,
+      night_start:            r.phases.nightStartHour,
+      night_resolution_start: r.phases.nightResolutionHour,
+      timezone:               r.phases.timezone,
+    },
+    step_thresholds: {
+      power_use:    r.steps.powerUseThreshold,
+      resurrection: r.steps.resurrectionThreshold,
+    },
+    voting_rules: {
+      vote_power_per_step:   r.voting.votePowerPerStep,
+      mayor_vote_multiplier: r.voting.mayorVoteMultiplier,
+    },
+    win_condition: r.winCondition.earlyEndIfFactionWiped
+      ? 'Game ends immediately when all members of a faction are eliminated.'
+      : 'Game plays to full duration — faction wipe does not trigger early end.',
+  }
 }
 
 export async function getGames(): Promise<Game[]> {

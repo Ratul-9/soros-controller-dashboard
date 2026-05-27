@@ -37,7 +37,7 @@ export function StatusBadge({ status, className }: StatusBadgeProps) {
         className
       )}
     >
-      {config.pulse && (
+      {'pulse' in config && config.pulse && (
         <span className="relative flex h-2 w-2">
           <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-active opacity-75" />
           <span className="relative inline-flex rounded-full h-2 w-2 bg-active" />

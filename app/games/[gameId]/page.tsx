@@ -298,8 +298,8 @@ function SubmitActionSection({ gameId, players }: { gameId: string; players: Pla
                 </SelectTrigger>
                 <SelectContent>
                   {players?.map((p) => (
-                    <SelectItem key={p.id} value={p.id.toString()}>
-                      {p.name} ({p.role})
+                    <SelectItem key={p.id} value={p.id}>
+                      {p.name} {p.role ? `(${p.role})` : ''}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -330,8 +330,8 @@ function SubmitActionSection({ gameId, players }: { gameId: string; players: Pla
                     <SelectValue placeholder="Select target" />
                   </SelectTrigger>
                   <SelectContent>
-                    {players?.filter(p => p.id.toString() !== actorId).map((p) => (
-                      <SelectItem key={p.id} value={p.id.toString()}>
+                    {players?.filter(p => p.id !== actorId).map((p) => (
+                      <SelectItem key={p.id} value={p.id}>
                         {p.name}
                       </SelectItem>
                     ))}

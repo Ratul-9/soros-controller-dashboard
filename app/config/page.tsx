@@ -8,22 +8,22 @@ import { Users, Clock, Vote, Trophy, Percent, Target } from 'lucide-react'
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts'
 
 const ROLE_COLORS: Record<string, string> = {
-  Doctor: '#22d3ee',
-  Detective: '#60a5fa',
-  Bodyguard: '#2dd4bf',
-  Mayor: '#fbbf24',
-  Commoner: '#94a3b8',
-  MafiaLeader: '#ef4444',
+  Doctor:        '#22d3ee',
+  Detective:     '#60a5fa',
+  Bodyguard:     '#2dd4bf',
+  Mayor:         '#fbbf24',
+  Commoner:      '#94a3b8',
+  MafiaLeader:   '#ef4444',
   SilencerMafia: '#f97316',
-  VanillaMafia: '#f87171',
+  VanillaMafia:  '#f87171',
 }
 
-function ConfigSection({ 
-  title, 
-  icon: Icon, 
+function ConfigSection({
+  title,
+  icon: Icon,
   children,
-  isLoading = false 
-}: { 
+  isLoading = false
+}: {
   title: string
   icon: React.ElementType
   children: React.ReactNode
@@ -62,11 +62,13 @@ function ConfigItem({ label, value }: { label: string; value: string | number })
 }
 
 function RoleDistributionChart({ distribution }: { distribution: Record<string, number> }) {
-  const data = Object.entries(distribution).map(([name, value]) => ({
-    name,
-    value,
-    color: ROLE_COLORS[name] || '#6b7280',
-  }))
+  const data = Object.entries(distribution)
+    .filter(([, v]) => v > 0)
+    .map(([name, value]) => ({
+      name,
+      value,
+      color: ROLE_COLORS[name] ?? '#6b7280',
+    }))
 
   return (
     <div className="h-64">
@@ -85,15 +87,15 @@ function RoleDistributionChart({ distribution }: { distribution: Record<string, 
               <Cell key={`cell-${index}`} fill={entry.color} />
             ))}
           </Pie>
-          <Tooltip 
-            contentStyle={{ 
-              backgroundColor: '#13131a', 
+          <Tooltip
+            contentStyle={{
+              backgroundColor: '#13131a',
               border: '1px solid #1e1e2e',
               borderRadius: '8px',
               fontSize: '12px'
             }}
           />
-          <Legend 
+          <Legend
             wrapperStyle={{ fontSize: '12px' }}
             formatter={(value) => <span className="text-foreground">{value}</span>}
           />
@@ -105,9 +107,9 @@ function RoleDistributionChart({ distribution }: { distribution: Record<string, 
 
 function PhaseTimeline({ timing }: { timing: GameConfig['phase_timing'] }) {
   const phases = [
-    { name: 'Morning', start: timing.morning_start, color: 'bg-morning', icon: '☀️' },
-    { name: 'Night', start: timing.night_start, color: 'bg-night', icon: '🌙' },
-    { name: 'Resolution', start: timing.night_resolution_start, color: 'bg-night-resolution', icon: '⏰' },
+    { name: 'Morning',    start: timing.morning_start,          color: 'bg-morning',          icon: '☀️' },
+    { name: 'Night',      start: timing.night_start,            color: 'bg-night',             icon: '🌙' },
+    { name: 'Resolution', start: timing.night_resolution_start, color: 'bg-night-resolution',  icon: '⏰' },
   ]
 
   const formatTime = (hour: number) => {
@@ -135,13 +137,18 @@ function PhaseTimeline({ timing }: { timing: GameConfig['phase_timing'] }) {
           </div>
         </div>
       ))}
+      {timing.timezone && (
+        <p className="text-xs text-muted-foreground pt-1 border-t border-border">
+          Timezone: {timing.timezone}
+        </p>
+      )}
     </div>
   )
 }
 
 export default function ConfigPage() {
   const isConfigured = typeof window !== 'undefined' && getApiConfig() !== null
-  
+
   const { data: config, isLoading } = useSWR<GameConfig>(
     isConfigured ? '/api/config' : null,
     () => getConfig(),
@@ -160,13 +167,15 @@ export default function ConfigPage() {
 
       {/* Config Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+
         {/* Match Shape */}
         <ConfigSection title="Match Shape" icon={Users} isLoading={isLoading}>
           {config && (
             <>
-              <ConfigItem label="Min Players" value={config.match_shape.min_players} />
-              <ConfigItem label="Max Players" value={config.match_shape.max_players} />
-              <ConfigItem label="Mafia Ratio" value={`${(config.match_shape.mafia_ratio * 100).toFixed(0)}%`} />
+              <ConfigItem label="Player Count"  value={config.match_shape.player_count} />
+              <ConfigItem label="Mafia Count"   value={config.match_shape.mafia_count} />
+              <ConfigItem label="Mafia Ratio"   value={`${(config.match_shape.mafia_ratio * 100).toFixed(0)}%`} />
+              <ConfigItem label="Duration"      value={`${config.match_shape.duration_days} days`} />
             </>
           )}
         </ConfigSection>
@@ -185,13 +194,13 @@ export default function ConfigPage() {
         <ConfigSection title="Step Thresholds" icon={Percent} isLoading={isLoading}>
           {config && (
             <>
-              <ConfigItem 
-                label="Town Win Threshold" 
-                value={`${config.step_thresholds.town_win} steps`} 
+              <ConfigItem
+                label="Power Use Unlock"
+                value={`${config.step_thresholds.power_use.toLocaleString()} steps`}
               />
-              <ConfigItem 
-                label="Mafia Win Threshold" 
-                value={`${config.step_thresholds.mafia_win} steps`} 
+              <ConfigItem
+                label="Resurrection Unlock"
+                value={`${config.step_thresholds.resurrection.toLocaleString()} steps`}
               />
             </>
           )}
@@ -201,13 +210,13 @@ export default function ConfigPage() {
         <ConfigSection title="Voting Rules" icon={Vote} isLoading={isLoading}>
           {config && (
             <>
-              <ConfigItem 
-                label="Min Votes to Eliminate" 
-                value={config.voting_rules.min_votes_to_eliminate} 
+              <ConfigItem
+                label="Vote Power / Step"
+                value={config.voting_rules.vote_power_per_step}
               />
-              <ConfigItem 
-                label="Mayor Vote Weight" 
-                value={`${config.voting_rules.mayor_vote_weight}x`} 
+              <ConfigItem
+                label="Mayor Multiplier"
+                value={`${config.voting_rules.mayor_vote_multiplier}x`}
               />
             </>
           )}
@@ -221,6 +230,7 @@ export default function ConfigPage() {
             </p>
           )}
         </ConfigSection>
+
       </div>
     </div>
   )
