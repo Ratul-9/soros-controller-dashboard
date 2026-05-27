@@ -122,7 +122,6 @@ function PlayersTable({ players, isLoading }: { players: Player[] | undefined; i
           <TableHead className="text-muted-foreground">Faction</TableHead>
           <TableHead className="text-muted-foreground">Status</TableHead>
           <TableHead className="text-muted-foreground">Steps</TableHead>
-          <TableHead className="text-muted-foreground">Mayor</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -148,11 +147,6 @@ function PlayersTable({ players, isLoading }: { players: Player[] | undefined; i
                   <Footprints className="h-4 w-4 text-muted-foreground" />
                   {player.lifetimeSteps}
                 </span>
-              </TableCell>
-              <TableCell>
-                {player.mayorRevealed && (
-                  <Check className="h-4 w-4 text-amber-400" />
-                )}
               </TableCell>
             </TableRow>
           )
