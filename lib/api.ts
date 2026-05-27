@@ -131,6 +131,18 @@ function mapGame(g: RawGame): Game {
   }
 }
 
+// Maps dashboard ActionType → backend action type string
+const ACTION_TYPE_MAP: Record<ActionType, string> = {
+  VOTE:                  'CastVote',
+  MAFIA_KILL:            'MafiaKillTarget',
+  DOCTOR_SAVE:           'DoctorSave',
+  DETECTIVE_INVESTIGATE: 'DetectiveInquire',
+  BODYGUARD_PROTECT:     'BodyguardProtect',
+  SILENCER_SILENCE:      'SilencerSilence',
+  MAYOR_REVEAL:          'RevealAsMayor',
+  SKIP:                  'Skip',
+}
+
 async function apiFetch<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
   const config = getApiConfig()
   if (!config) throw new Error('API not configured')
@@ -183,7 +195,9 @@ export async function getGame(gameId: string): Promise<Game> {
 }
 
 export async function createGame(): Promise<Game> {
-  return apiFetch<Game>('/api/games', { method: 'POST' })
+  // Backend returns { gameId: string } — fetch the full game object afterwards
+  const { gameId } = await apiFetch<{ gameId: string }>('/api/games', { method: 'POST' })
+  return getGame(gameId)
 }
 
 export async function getPlayers(gameId: string): Promise<Player[]> {
@@ -191,26 +205,54 @@ export async function getPlayers(gameId: string): Promise<Player[]> {
   return res.players.map(p => ({ ...p, name: p.displayName }))
 }
 
+interface RawTally {
+  gameId: string
+  townTotal: number
+  mafiaTotal: number
+  aliveTownCount: number
+  aliveMafiaCount: number
+  townLeading: boolean
+}
+
 export async function getTally(gameId: string): Promise<GameTally> {
-  return apiFetch<GameTally>(`/api/games/${gameId}/tally`)
+  // Backend returns townTotal/mafiaTotal — map to the GameTally shape and
+  // compute percentages so the StepTallyBar never calls .toFixed() on undefined.
+  const raw = await apiFetch<RawTally>(`/api/games/${gameId}/tally`)
+  const total = raw.townTotal + raw.mafiaTotal
+  return {
+    townSteps:       raw.townTotal,
+    mafiaSteps:      raw.mafiaTotal,
+    totalSteps:      total,
+    townPercentage:  total > 0 ? (raw.townTotal  / total) * 100 : 50,
+    mafiaPercentage: total > 0 ? (raw.mafiaTotal / total) * 100 : 50,
+  }
 }
 
 export async function joinGame(gameId: string, userId: number): Promise<{ status: string }> {
-  return apiFetch<{ status: string }>(`/api/games/${gameId}/join`, {
-    method: 'POST',
-    body: JSON.stringify({ userId }),
-  })
+  // Backend returns { result, gameId, userId } — map 'result' → 'status'
+  const res = await apiFetch<{ result: string; gameId: string; userId: number }>(
+    `/api/games/${gameId}/join`,
+    { method: 'POST', body: JSON.stringify({ userId }) }
+  )
+  return { status: res.result }
 }
 
 export async function submitAction(
   gameId: string,
-  actorId: number,
+  actorPlayerId: string,   // PlayerId string (e.g. "player_abc123"), not userId int
   actionType: ActionType,
-  targetId?: number
+  targetPlayerId?: string  // PlayerId string, optional
 ): Promise<void> {
+  // Backend expects { actorPlayerId, type, targetPlayerId? }
+  // 'type' uses backend-native names (CastVote, MafiaKillTarget, …)
+  const body: Record<string, string> = {
+    actorPlayerId,
+    type: ACTION_TYPE_MAP[actionType],
+  }
+  if (targetPlayerId) body.targetPlayerId = targetPlayerId
   await apiFetch(`/api/games/${gameId}/actions`, {
     method: 'POST',
-    body: JSON.stringify({ actorId, actionType, targetId }),
+    body: JSON.stringify(body),
   })
 }
 

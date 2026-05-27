@@ -254,10 +254,10 @@ function SubmitActionSection({ gameId, players }: { gameId: string; players: Pla
     
     try {
       await submitAction(
-        gameId, 
-        parseInt(actorId), 
+        gameId,
+        actorId,                                    // already a string PlayerId
         actionType,
-        needsTarget && targetId ? parseInt(targetId) : undefined
+        needsTarget && targetId ? targetId : undefined  // already a string PlayerId
       )
       toast.success('Action submitted', {
         description: 'Action accepted (202)',
