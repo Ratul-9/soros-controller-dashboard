@@ -22,6 +22,8 @@ import {
   Sword,
   AlertCircle,
   Activity,
+  Footprints,
+  Wand2,
 } from 'lucide-react'
 
 // ── Role label (backend role enum int → readable name) ──────────────────────
@@ -304,6 +306,37 @@ function renderEvent(e: GameEvent, players: Player[] | undefined): RenderedEvent
         color: 'text-zinc-400',
         message: <span>Step tally updated</span>,
       }
+    case 'StepsAddedByAdmin': {
+      const added = Number(p.stepsAdded ?? 0)
+      const newTotal = Number(p.newLifetimeSteps ?? 0)
+      return {
+        icon: Wand2,
+        color: 'text-fuchsia-400',
+        message: (
+          <span>
+            <strong>Added from dashboard:</strong>{' '}
+            <strong>{added.toLocaleString()}</strong> steps to{' '}
+            <strong>{playerName}</strong> (total {newTotal.toLocaleString()})
+          </span>
+        ),
+      }
+    }
+    case 'StepsSyncedFromHealth': {
+      const added = Number(p.stepsAdded ?? 0)
+      const newTotal = Number(p.newLifetimeSteps ?? 0)
+      return {
+        icon: Footprints,
+        color: 'text-emerald-400',
+        message: (
+          <span>
+            <strong>Synced steps:</strong>{' '}
+            <strong>{playerName}</strong> walked{' '}
+            <strong>{added.toLocaleString()}</strong> steps (total{' '}
+            {newTotal.toLocaleString()})
+          </span>
+        ),
+      }
+    }
     default:
       return {
         icon: Activity,
