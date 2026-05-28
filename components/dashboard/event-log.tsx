@@ -365,10 +365,21 @@ export function EventLog({ gameId, players, isConfigured }: Props) {
     { refreshInterval: 3000 }
   )
 
+  // Event types that are per-user chatter — useful to the affected player
+  // but pure noise in the operator's audit log (12 role assignments per game
+  // start, one VotesAgainstYouUpdate per vote target, etc.).
+  const HIDDEN_TYPES = new Set([
+    'YourRoleAssigned',
+    'VotesAgainstYouUpdate',
+  ])
+
   const items = useMemo(() => {
     if (!events) return []
     // Backend returns newest first — keep that order so latest sits on top.
-    return events.map((e) => ({ event: e, ...renderEvent(e, players) }))
+    return events
+      .filter((e) => !HIDDEN_TYPES.has(e.type))
+      .map((e) => ({ event: e, ...renderEvent(e, players) }))
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [events, players])
 
   return (
