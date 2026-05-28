@@ -53,6 +53,11 @@ export interface Game {
   createdAt?: string
 }
 
+export interface VoterEntry {
+  userId: string
+  name: string
+}
+
 export interface Player {
   id: string
   userId: string
@@ -63,6 +68,8 @@ export interface Player {
   lifetimeSteps: number
   activeSteps: number
   mayorRevealed: boolean
+  votesReceived: number
+  votersAgainstMe: VoterEntry[]
 }
 
 export interface GameTally {
@@ -177,6 +184,8 @@ interface RawPlayer {
   lifetimeSteps: number
   activeSteps: number
   mayorRevealed: boolean
+  votesReceived: number
+  votersAgainstMe: { userId: number; name: string }[]
 }
 
 // Maps dashboard ActionType → backend action type string
@@ -338,9 +347,14 @@ export async function getPlayers(gameId: string): Promise<Player[]> {
     role:          p.role != null ? (ROLE_MAP[p.role] ?? null) : null,
     faction:       (p.faction as Player['faction']) ?? null,
     status:        PLAYER_STATUS_MAP[p.status] ?? p.status as Player['status'],
-    lifetimeSteps: p.lifetimeSteps,
-    activeSteps:   p.activeSteps,
-    mayorRevealed: p.mayorRevealed,
+    lifetimeSteps:    p.lifetimeSteps,
+    activeSteps:      p.activeSteps,
+    mayorRevealed:    p.mayorRevealed,
+    votesReceived:    p.votesReceived ?? 0,
+    votersAgainstMe:  (p.votersAgainstMe ?? []).map(v => ({
+      userId: String(v.userId),
+      name:   v.name,
+    })),
   }))
 }
 

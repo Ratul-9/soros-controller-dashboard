@@ -94,7 +94,7 @@ function StepTallyBar({ tally }: { tally: GameTally | undefined }) {
   )
 }
 
-function PlayersTable({ players, isLoading }: { players: Player[] | undefined; isLoading: boolean }) {
+function PlayersTable({ players, isLoading, showVotes }: { players: Player[] | undefined; isLoading: boolean; showVotes: boolean }) {
   if (isLoading) {
     return (
       <div className="space-y-2">
@@ -122,16 +122,18 @@ function PlayersTable({ players, isLoading }: { players: Player[] | undefined; i
           <TableHead className="text-muted-foreground">Faction</TableHead>
           <TableHead className="text-muted-foreground">Status</TableHead>
           <TableHead className="text-muted-foreground">Steps</TableHead>
+          {showVotes && <TableHead className="text-muted-foreground">Votes Against</TableHead>}
         </TableRow>
       </TableHeader>
       <TableBody>
         {players.map((player) => {
           const isMafia = player.faction === 'MAFIA'
           const isDead = player.status === 'Eliminated' || player.status === 'DeadForever'
-          
+          const hasVotes = player.votesReceived > 0
+
           return (
-            <TableRow 
-              key={player.id} 
+            <TableRow
+              key={player.id}
               className={cn(
                 "border-border",
                 isMafia && "bg-mafia/5",
@@ -148,6 +150,29 @@ function PlayersTable({ players, isLoading }: { players: Player[] | undefined; i
                   {player.lifetimeSteps}
                 </span>
               </TableCell>
+              {showVotes && (
+                <TableCell>
+                  {hasVotes ? (
+                    <div className="space-y-1">
+                      <span className="inline-flex items-center gap-1 font-mono text-sm font-semibold text-destructive">
+                        {player.votesReceived} pts
+                      </span>
+                      <div className="flex flex-wrap gap-1">
+                        {player.votersAgainstMe.map(v => (
+                          <span
+                            key={v.userId}
+                            className="text-[10px] px-1.5 py-0.5 rounded bg-destructive/10 text-destructive"
+                          >
+                            {v.name}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    <span className="text-muted-foreground text-sm">—</span>
+                  )}
+                </TableCell>
+              )}
             </TableRow>
           )
         })}
@@ -620,7 +645,11 @@ export default function GameDetailPage({ params }: { params: Promise<{ gameId: s
               <CardTitle className="text-lg">Players ({players?.length || 0})</CardTitle>
             </CardHeader>
             <CardContent className="p-0">
-              <PlayersTable players={players} isLoading={playersLoading} />
+              <PlayersTable
+                players={players}
+                isLoading={playersLoading}
+                showVotes={game.phase === 'Morning'}
+              />
             </CardContent>
           </Card>
         </div>
