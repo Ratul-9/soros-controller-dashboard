@@ -80,6 +80,16 @@ export interface GameTally {
   mafiaPercentage: number
 }
 
+export interface GameEvent {
+  id: number
+  type: string
+  visibility: 'Public' | 'PrivateToUser' | 'MafiaTeamOnly' | 'TownTeamOnly' | string
+  dayNumber: number
+  targetUserId?: number
+  payload: Record<string, unknown>
+  occurredAtMs: number
+}
+
 export type ActionType = 
   | 'VOTE'
   | 'MAFIA_KILL'
@@ -340,22 +350,24 @@ export async function createGame(): Promise<Game> {
 
 export async function getPlayers(gameId: string): Promise<Player[]> {
   const res = await apiFetch<{ gameId: string; players: RawPlayer[] }>(`/api/games/${gameId}/players`)
-  return res.players.map(p => ({
-    id:            p.id,
-    userId:        String(p.userId),
-    name:          p.displayName,
-    role:          p.role != null ? (ROLE_MAP[p.role] ?? null) : null,
-    faction:       (p.faction as Player['faction']) ?? null,
-    status:        PLAYER_STATUS_MAP[p.status] ?? p.status as Player['status'],
-    lifetimeSteps:    p.lifetimeSteps,
-    activeSteps:      p.activeSteps,
-    mayorRevealed:    p.mayorRevealed,
-    votesReceived:    p.votesReceived ?? 0,
-    votersAgainstMe:  (p.votersAgainstMe ?? []).map(v => ({
-      userId: String(v.userId),
-      name:   v.name,
-    })),
-  }))
+  return res.players
+    .map(p => ({
+      id:            p.id,
+      userId:        String(p.userId),
+      name:          p.displayName,
+      role:          p.role != null ? (ROLE_MAP[p.role] ?? null) : null,
+      faction:       (p.faction as Player['faction']) ?? null,
+      status:        PLAYER_STATUS_MAP[p.status] ?? p.status as Player['status'],
+      lifetimeSteps:    p.lifetimeSteps,
+      activeSteps:      p.activeSteps,
+      mayorRevealed:    p.mayorRevealed,
+      votesReceived:    p.votesReceived ?? 0,
+      votersAgainstMe:  (p.votersAgainstMe ?? []).map(v => ({
+        userId: String(v.userId),
+        name:   v.name,
+      })),
+    }))
+    .sort((a, b) => a.id.localeCompare(b.id))
 }
 
 interface RawTally {
@@ -379,6 +391,19 @@ export async function getTally(gameId: string): Promise<GameTally> {
     townPercentage:  total > 0 ? (raw.townTotal  / total) * 100 : 50,
     mafiaPercentage: total > 0 ? (raw.mafiaTotal / total) * 100 : 50,
   }
+}
+
+export async function getEvents(
+  gameId: string,
+  opts: { sinceDay?: number; limit?: number } = {}
+): Promise<GameEvent[]> {
+  const params = new URLSearchParams()
+  if (opts.sinceDay !== undefined) params.set('sinceDay', String(opts.sinceDay))
+  if (opts.limit !== undefined)    params.set('limit',    String(opts.limit))
+  const qs  = params.toString()
+  const url = `/api/games/${gameId}/events${qs ? `?${qs}` : ''}`
+  const res = await apiFetch<{ gameId: string; events: GameEvent[] }>(url)
+  return res.events
 }
 
 export async function joinGame(gameId: string, userId: number): Promise<{ status: string }> {

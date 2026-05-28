@@ -31,6 +31,7 @@ import { RoleBadge } from '@/components/dashboard/role-badge'
 import { FactionBadge } from '@/components/dashboard/faction-badge'
 import { PlayerStatusBadge } from '@/components/dashboard/player-status-badge'
 import { WinnerBadge } from '@/components/dashboard/winner-badge'
+import { EventLog } from '@/components/dashboard/event-log'
 import {
   ArrowLeft,
   Footprints,
@@ -652,6 +653,13 @@ export default function GameDetailPage({ params }: { params: Promise<{ gameId: s
               />
             </CardContent>
           </Card>
+
+          {/* Activity Log — full audit feed for this game */}
+          <EventLog
+            gameId={gameId}
+            players={players}
+            isConfigured={isConfigured}
+          />
         </div>
 
         {/* Right Panel - 40% Admin Controls */}
