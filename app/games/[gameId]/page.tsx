@@ -3,15 +3,16 @@
 import { useState, use } from 'react'
 import useSWR from 'swr'
 import { useRouter } from 'next/navigation'
-import { 
-  getGame, 
-  getPlayers, 
-  getTally, 
-  getApiConfig, 
-  joinGame, 
+import {
+  getGame,
+  getPlayers,
+  getTally,
+  getApiConfig,
+  joinGame,
   submitAction,
-  type Game, 
-  type Player, 
+  addStepsToPlayer,
+  type Game,
+  type Player,
   type GameTally,
   type ActionType
 } from '@/lib/api'
@@ -30,12 +31,11 @@ import { RoleBadge } from '@/components/dashboard/role-badge'
 import { FactionBadge } from '@/components/dashboard/faction-badge'
 import { PlayerStatusBadge } from '@/components/dashboard/player-status-badge'
 import { WinnerBadge } from '@/components/dashboard/winner-badge'
-import { 
-  ArrowLeft, 
-  Check, 
-  Footprints, 
-  ChevronDown, 
-  Lock, 
+import {
+  ArrowLeft,
+  Footprints,
+  ChevronDown,
+  Lock,
   AlertTriangle,
   UserPlus,
   Zap,
@@ -153,6 +153,95 @@ function PlayersTable({ players, isLoading }: { players: Player[] | undefined; i
         })}
       </TableBody>
     </Table>
+  )
+}
+
+function AddStepsSection({ gameId, players, onSuccess }: { gameId: string; players: Player[] | undefined; onSuccess: () => void }) {
+  const [playerId, setPlayerId] = useState('')
+  const [steps, setSteps] = useState('')
+  const [isAdding, setIsAdding] = useState(false)
+
+  const handleAddSteps = async () => {
+    const stepsNum = parseInt(steps)
+    if (!playerId || !steps || stepsNum <= 0) return
+    setIsAdding(true)
+
+    try {
+      const result = await addStepsToPlayer(gameId, playerId, stepsNum)
+      const player = players?.find(p => p.id === playerId)
+      toast.success(`Added ${stepsNum.toLocaleString()} steps`, {
+        description: `${player?.name ?? 'Player'} now has ${result.newLifetimeSteps.toLocaleString()} lifetime steps`,
+      })
+      setSteps('')
+      onSuccess()
+    } catch (error) {
+      toast.error('Failed to add steps', {
+        description: error instanceof Error ? error.message : 'Unknown error',
+      })
+    } finally {
+      setIsAdding(false)
+    }
+  }
+
+  return (
+    <Card className="bg-card border-border">
+      <CardHeader className="pb-3">
+        <CardTitle className="text-sm flex items-center gap-2">
+          <Footprints className="h-4 w-4" />
+          Add Steps
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <div className="space-y-2">
+          <Label className="text-xs text-muted-foreground">Player</Label>
+          <Select value={playerId} onValueChange={setPlayerId}>
+            <SelectTrigger className="bg-secondary border-border">
+              <SelectValue placeholder="Select player" />
+            </SelectTrigger>
+            <SelectContent>
+              {players?.map((p) => (
+                <SelectItem key={p.id} value={p.id}>
+                  {p.name}
+                  <span className="ml-2 font-mono text-xs text-muted-foreground">
+                    {p.lifetimeSteps.toLocaleString()} steps
+                  </span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="stepsToAdd" className="text-xs text-muted-foreground">Steps to Add</Label>
+          <Input
+            id="stepsToAdd"
+            type="number"
+            value={steps}
+            onChange={(e) => setSteps(e.target.value)}
+            placeholder="e.g. 5000"
+            min="1"
+            className="font-mono text-sm bg-secondary border-border"
+          />
+        </div>
+        <Button
+          onClick={handleAddSteps}
+          disabled={!playerId || !steps || parseInt(steps) <= 0 || isAdding}
+          size="sm"
+          className="w-full"
+        >
+          {isAdding ? (
+            <>
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              Adding...
+            </>
+          ) : (
+            <>
+              <Footprints className="h-4 w-4 mr-2" />
+              Add Steps
+            </>
+          )}
+        </Button>
+      </CardContent>
+    </Card>
   )
 }
 
@@ -359,6 +448,11 @@ function SubmitActionSection({ gameId, players }: { gameId: string; players: Pla
 function AdminOverridesSection({ gameId }: { gameId: string }) {
   const [confirmDelete, setConfirmDelete] = useState('')
 
+  const handleForceEndGame = () => {
+    // TODO: Implement the API call to force end the game
+    toast.info("Force End Game functionality is not yet implemented.")
+  }
+
   return (
     <Card className="bg-secondary/30 border-border">
       <CardHeader className="pb-3">
@@ -417,6 +511,7 @@ function AdminOverridesSection({ gameId }: { gameId: string }) {
             size="sm" 
             className="w-full"
             disabled={confirmDelete !== gameId.slice(0, 8)}
+            onClick={handleForceEndGame}
           >
             <XCircle className="h-4 w-4 mr-2" />
             Force End Game
@@ -533,6 +628,7 @@ export default function GameDetailPage({ params }: { params: Promise<{ gameId: s
         {/* Right Panel - 40% Admin Controls */}
         <div className="lg:col-span-2 space-y-4">
           <AddPlayerSection gameId={gameId} onSuccess={() => mutatePlayers()} />
+          <AddStepsSection gameId={gameId} players={players} onSuccess={() => mutatePlayers()} />
           <SubmitActionSection gameId={gameId} players={players} />
           <AdminOverridesSection gameId={gameId} />
         </div>

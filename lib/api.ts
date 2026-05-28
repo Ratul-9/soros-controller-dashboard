@@ -201,6 +201,7 @@ async function apiFetch<T>(endpoint: string, options: RequestInit = {}): Promise
   // so the proxy can forward them without needing Vercel env vars.
   const url = `/api/proxy${endpoint}`
   const response = await fetch(url, {
+    cache: 'no-store',
     ...options,
     headers: {
       'content-type':      'application/json',
@@ -373,6 +374,17 @@ export async function joinGame(gameId: string, userId: number): Promise<{ status
     { method: 'POST', body: JSON.stringify({ userId }) }
   )
   return { status: res.result }
+}
+
+export async function addStepsToPlayer(
+  gameId: string,
+  playerId: string,
+  steps: number
+): Promise<{ newLifetimeSteps: number }> {
+  return apiFetch(`/api/games/${gameId}/players/${playerId}/steps`, {
+    method: 'PATCH',
+    body: JSON.stringify({ steps }),
+  })
 }
 
 export async function submitAction(
