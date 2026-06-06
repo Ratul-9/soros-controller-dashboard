@@ -44,6 +44,7 @@ export interface GameConfig {
 
 export interface Game {
   id: string
+  name?: string
   status: 'LOBBY' | 'ACTIVE' | 'GAMEOVER'
   phase: 'PreGame' | 'Morning' | 'Night' | 'NightResolution' | 'PostGame'
   day: number
@@ -51,6 +52,13 @@ export interface Game {
   maxPlayers: number
   winner?: 'TOWN' | 'MAFIA' | null
   createdAt?: string
+}
+
+export interface PlayerNotification {
+  id: number
+  title: string
+  body: string
+  sentAtMs: number
 }
 
 export interface VoterEntry {
@@ -162,6 +170,7 @@ const PLAYER_STATUS_MAP: Record<string, Player['status']> = {
 
 interface RawGame {
   id: string
+  name?: string
   status: string
   phase: string
   dayNumber: number
@@ -174,6 +183,7 @@ interface RawGame {
 function mapGame(g: RawGame): Game {
   return {
     id:         g.id,
+    name:       g.name ?? '',
     status:     g.status as Game['status'],
     phase:      PHASE_MAP[g.phase] ?? g.phase as Game['phase'],
     day:        g.dayNumber,
@@ -342,10 +352,35 @@ export async function getGame(gameId: string): Promise<Game> {
   return mapGame(raw)
 }
 
-export async function createGame(): Promise<Game> {
+export async function createGame(name?: string): Promise<Game> {
   // Backend returns { gameId: string } — fetch the full game object afterwards
-  const { gameId } = await apiFetch<{ gameId: string }>('/api/games', { method: 'POST' })
+  const { gameId } = await apiFetch<{ gameId: string }>('/api/games', {
+    method: 'POST',
+    body: JSON.stringify({ name: name ?? '' }),
+  })
   return getGame(gameId)
+}
+
+// Force the game to a target phase (rolls the day as needed). Pauses the
+// backend's auto real-time scheduler so the game is fully manually controlled.
+export async function forcePhase(
+  gameId: string,
+  to: 'Morning' | 'Night' | 'NightResolution'
+): Promise<void> {
+  await apiFetch(`/api/games/${gameId}/phase`, {
+    method: 'POST',
+    body: JSON.stringify({ to }),
+  })
+}
+
+export async function getPlayerNotifications(
+  gameId: string,
+  playerId: string
+): Promise<PlayerNotification[]> {
+  const res = await apiFetch<{ notifications: PlayerNotification[] }>(
+    `/api/games/${gameId}/players/${playerId}/notifications`
+  )
+  return res.notifications ?? []
 }
 
 export async function getPlayers(gameId: string): Promise<Player[]> {

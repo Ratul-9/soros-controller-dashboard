@@ -11,16 +11,27 @@ import {
   joinGame,
   submitAction,
   addStepsToPlayer,
+  forcePhase,
+  getEvents,
+  getPlayerNotifications,
   type Game,
   type Player,
   type GameTally,
-  type ActionType
+  type ActionType,
+  type GameEvent,
+  type PlayerNotification,
 } from '@/lib/api'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Badge } from '@/components/ui/badge'
+import { ScrollArea } from '@/components/ui/scroll-area'
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle,
+} from '@/components/ui/dialog'
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
@@ -31,25 +42,47 @@ import { RoleBadge } from '@/components/dashboard/role-badge'
 import { FactionBadge } from '@/components/dashboard/faction-badge'
 import { PlayerStatusBadge } from '@/components/dashboard/player-status-badge'
 import { WinnerBadge } from '@/components/dashboard/winner-badge'
-import { EventLog } from '@/components/dashboard/event-log'
+import { EventLog, renderEvent, formatTime } from '@/components/dashboard/event-log'
 import {
   ArrowLeft,
   Footprints,
   ChevronDown,
-  Lock,
   AlertTriangle,
   UserPlus,
   Zap,
-  Play,
   Sun,
   Moon,
   Clock,
-  XCircle,
+  Bell,
+  Activity,
   Loader2
 } from 'lucide-react'
 import { toast } from 'sonner'
 import Link from 'next/link'
 import { cn } from '@/lib/utils'
+
+// Which actions each role can perform. Vote + Skip are appended for everyone.
+// (The backend still enforces phase/role/status — we show all, submit, and let
+// it validate.)
+const ROLE_ACTIONS: Record<string, { value: ActionType; label: string; needsTarget: boolean }[]> = {
+  Doctor:        [{ value: 'DOCTOR_SAVE',           label: 'Save a player',        needsTarget: true }],
+  Detective:     [{ value: 'DETECTIVE_INVESTIGATE', label: 'Investigate a player', needsTarget: true }],
+  Bodyguard:     [{ value: 'BODYGUARD_PROTECT',     label: 'Protect a player',     needsTarget: true }],
+  Mayor:         [{ value: 'MAYOR_REVEAL',          label: 'Reveal as Mayor',      needsTarget: false }],
+  Commoner:      [],
+  MafiaLeader:   [{ value: 'MAFIA_KILL',            label: 'Eliminate a player',   needsTarget: true }],
+  SilencerMafia: [{ value: 'SILENCER_SILENCE',      label: 'Silence a player',     needsTarget: true }],
+  VanillaMafia:  [],
+}
+
+function actionsForPlayer(player: Player): { value: ActionType; label: string; needsTarget: boolean }[] {
+  const roleActions = (player.role && ROLE_ACTIONS[player.role]) || []
+  return [
+    ...roleActions,
+    { value: 'VOTE', label: 'Cast vote', needsTarget: true },
+    { value: 'SKIP', label: 'Skip / pass', needsTarget: false },
+  ]
+}
 
 const ACTION_TYPES: { value: ActionType; label: string }[] = [
   { value: 'VOTE', label: 'Vote' },
@@ -95,7 +128,7 @@ function StepTallyBar({ tally }: { tally: GameTally | undefined }) {
   )
 }
 
-function PlayersTable({ players, isLoading, showVotes }: { players: Player[] | undefined; isLoading: boolean; showVotes: boolean }) {
+function PlayersTable({ players, isLoading, showVotes, onPlayerClick }: { players: Player[] | undefined; isLoading: boolean; showVotes: boolean; onPlayerClick: (p: Player) => void }) {
   if (isLoading) {
     return (
       <div className="space-y-2">
@@ -135,8 +168,9 @@ function PlayersTable({ players, isLoading, showVotes }: { players: Player[] | u
           return (
             <TableRow
               key={player.id}
+              onClick={() => onPlayerClick(player)}
               className={cn(
-                "border-border",
+                "border-border cursor-pointer hover:bg-secondary/40",
                 isMafia && "bg-mafia/5",
                 isDead && "opacity-50"
               )}
@@ -471,12 +505,26 @@ function SubmitActionSection({ gameId, players }: { gameId: string; players: Pla
   )
 }
 
-function AdminOverridesSection({ gameId }: { gameId: string }) {
-  const [confirmDelete, setConfirmDelete] = useState('')
+function AdminOverridesSection({ gameId, game, onChanged }: { gameId: string; game: Game; onChanged: () => void }) {
+  const [forcing, setForcing] = useState<string | null>(null)
+  const isActive = game.status === 'ACTIVE'
 
-  const handleForceEndGame = () => {
-    // TODO: Implement the API call to force end the game
-    toast.info("Force End Game functionality is not yet implemented.")
+  const handleForcePhase = async (to: 'Morning' | 'Night' | 'NightResolution') => {
+    setForcing(to)
+    try {
+      await forcePhase(gameId, to)
+      toast.success(`Forcing → ${to}`, {
+        description: 'Auto-scheduler paused. Refreshing game state…',
+      })
+      // Give the async worker a moment, then refresh.
+      setTimeout(onChanged, 600)
+    } catch (error) {
+      toast.error('Failed to force phase', {
+        description: error instanceof Error ? error.message : 'Unknown error',
+      })
+    } finally {
+      setTimeout(() => setForcing(null), 600)
+    }
   }
 
   return (
@@ -484,67 +532,253 @@ function AdminOverridesSection({ gameId }: { gameId: string }) {
       <CardHeader className="pb-3">
         <CardTitle className="text-sm flex items-center gap-2 text-muted-foreground">
           <AlertTriangle className="h-4 w-4" />
-          Admin Overrides
+          Phase Control
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
-        {/* Force Start */}
-        <div className="space-y-1">
-          <Button variant="outline" size="sm" className="w-full" disabled>
-            <Play className="h-4 w-4 mr-2" />
-            <Lock className="h-3 w-3 mr-1 text-muted-foreground" />
-            Force Start
-          </Button>
-          <p className="text-[10px] text-muted-foreground text-center">
-            Needs GameRoomManager::forceStartGame
-          </p>
+        <div className="flex items-center justify-between text-xs">
+          <span className="text-muted-foreground">Current</span>
+          <span className="font-mono">
+            Day {game.day} · {game.phase}
+          </span>
         </div>
 
-        {/* Force Phase */}
+        {/* Force Phase — advances (rolling the day) and pauses auto-scheduler */}
         <div className="space-y-1">
           <div className="grid grid-cols-3 gap-2">
-            <Button variant="outline" size="sm" disabled>
-              <Sun className="h-4 w-4 mr-1" />
-              <Lock className="h-3 w-3" />
+            <Button variant="outline" size="sm" disabled={!isActive || forcing !== null}
+              onClick={() => handleForcePhase('Morning')}>
+              {forcing === 'Morning' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sun className="h-4 w-4 mr-1" />}
+              Morning
             </Button>
-            <Button variant="outline" size="sm" disabled>
-              <Moon className="h-4 w-4 mr-1" />
-              <Lock className="h-3 w-3" />
+            <Button variant="outline" size="sm" disabled={!isActive || forcing !== null}
+              onClick={() => handleForcePhase('Night')}>
+              {forcing === 'Night' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Moon className="h-4 w-4 mr-1" />}
+              Night
             </Button>
-            <Button variant="outline" size="sm" disabled>
-              <Clock className="h-4 w-4 mr-1" />
-              <Lock className="h-3 w-3" />
+            <Button variant="outline" size="sm" disabled={!isActive || forcing !== null}
+              onClick={() => handleForcePhase('NightResolution')}>
+              {forcing === 'NightResolution' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Clock className="h-4 w-4 mr-1" />}
+              Resolve
             </Button>
           </div>
           <p className="text-[10px] text-muted-foreground text-center">
-            Force Phase buttons require backend extension
+            {isActive
+              ? 'Forcing a phase pauses the auto real-time scheduler. Night → Morning rolls to the next day.'
+              : 'Game must be Active to force phases.'}
           </p>
-        </div>
-
-        {/* Force End Game */}
-        <div className="space-y-2 pt-2 border-t border-border">
-          <Label className="text-xs text-muted-foreground">
-            Type game ID to confirm force end
-          </Label>
-          <Input
-            value={confirmDelete}
-            onChange={(e) => setConfirmDelete(e.target.value)}
-            placeholder={gameId.slice(0, 8)}
-            className="font-mono text-sm bg-secondary border-border"
-          />
-          <Button 
-            variant="destructive" 
-            size="sm" 
-            className="w-full"
-            disabled={confirmDelete !== gameId.slice(0, 8)}
-            onClick={handleForceEndGame}
-          >
-            <XCircle className="h-4 w-4 mr-2" />
-            Force End Game
-          </Button>
         </div>
       </CardContent>
     </Card>
+  )
+}
+
+// ── Per-player control panel (click a player row to open) ───────────────────
+function PlayerControlDialog({
+  gameId, player, players, open, onOpenChange, onActed,
+}: {
+  gameId: string
+  player: Player | null
+  players: Player[] | undefined
+  open: boolean
+  onOpenChange: (o: boolean) => void
+  onActed: () => void
+}) {
+  const [actionType, setActionType] = useState<ActionType | ''>('')
+  const [targetId, setTargetId] = useState('')
+  const [isSubmitting, setIsSubmitting] = useState(false)
+
+  // Activity + notification logs — only fetched while the dialog is open.
+  const { data: events } = useSWR<GameEvent[]>(
+    open && player ? `/api/games/${gameId}/events#${player.id}` : null,
+    () => getEvents(gameId, { limit: 500 }),
+    { refreshInterval: 4000 }
+  )
+  const { data: notifications } = useSWR<PlayerNotification[]>(
+    open && player ? `/api/games/${gameId}/players/${player.id}/notifications` : null,
+    () => getPlayerNotifications(gameId, player!.id),
+    { refreshInterval: 5000 }
+  )
+
+  if (!player) return null
+
+  const available = actionsForPlayer(player)
+  const selected = available.find(a => a.value === actionType)
+  const needsTarget = selected?.needsTarget ?? false
+
+  // Events that involve this player (as actor target or subject).
+  const uid = Number(player.userId)
+  const playerEvents = (events ?? []).filter(e => {
+    if (e.targetUserId === uid) return true
+    const p = e.payload as Record<string, unknown>
+    return (
+      p.playerId === player.id ||
+      p.playerName === player.name ||
+      p.targetPlayerName === player.name ||
+      p.inquiredAboutPlayerName === player.name
+    )
+  })
+
+  const handlePerform = async () => {
+    if (!actionType) return
+    setIsSubmitting(true)
+    try {
+      await submitAction(
+        gameId,
+        player.id,
+        actionType,
+        needsTarget && targetId ? targetId : undefined
+      )
+      toast.success('Action submitted', {
+        description: `${player.name}: ${selected?.label}. The backend validates phase/role/status; refresh to see the result.`,
+      })
+      setActionType('')
+      setTargetId('')
+      onActed()
+    } catch (error) {
+      toast.error('Failed to submit action', {
+        description: error instanceof Error ? error.message : 'Unknown error',
+      })
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 flex-wrap">
+            <span>{player.name}</span>
+            <RoleBadge role={player.role} />
+            <FactionBadge faction={player.faction} />
+            <PlayerStatusBadge status={player.status} />
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="flex items-center gap-3 text-xs text-muted-foreground">
+          <span className="inline-flex items-center gap-1 font-mono">
+            <Footprints className="h-3.5 w-3.5" />
+            {player.lifetimeSteps.toLocaleString()} steps
+          </span>
+          <span className="font-mono">id {player.id.slice(0, 10)}…</span>
+        </div>
+
+        <Tabs defaultValue="actions" className="mt-2">
+          <TabsList className="grid grid-cols-3 w-full">
+            <TabsTrigger value="actions"><Zap className="h-3.5 w-3.5 mr-1" />Actions</TabsTrigger>
+            <TabsTrigger value="activity"><Activity className="h-3.5 w-3.5 mr-1" />Activity</TabsTrigger>
+            <TabsTrigger value="notifs"><Bell className="h-3.5 w-3.5 mr-1" />Notifications</TabsTrigger>
+          </TabsList>
+
+          {/* ── Actions ── */}
+          <TabsContent value="actions" className="space-y-3 pt-3">
+            <div className="space-y-2">
+              <Label className="text-xs text-muted-foreground">
+                Action ({player.role ?? 'no role yet'})
+              </Label>
+              <Select value={actionType} onValueChange={(v) => { setActionType(v as ActionType); setTargetId('') }}>
+                <SelectTrigger className="bg-secondary border-border">
+                  <SelectValue placeholder="Choose what this player does" />
+                </SelectTrigger>
+                <SelectContent>
+                  {available.map(a => (
+                    <SelectItem key={a.value} value={a.value}>{a.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {needsTarget && (
+              <div className="space-y-2">
+                <Label className="text-xs text-muted-foreground">Target player</Label>
+                <Select value={targetId} onValueChange={setTargetId}>
+                  <SelectTrigger className="bg-secondary border-border">
+                    <SelectValue placeholder="Select target" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {players?.filter(p => p.id !== player.id).map(p => (
+                      <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            <Button
+              className="w-full"
+              size="sm"
+              disabled={!actionType || (needsTarget && !targetId) || isSubmitting}
+              onClick={handlePerform}
+            >
+              {isSubmitting
+                ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Submitting…</>
+                : <>Perform{selected ? `: ${selected.label}` : ''}</>}
+            </Button>
+            <p className="text-[10px] text-muted-foreground">
+              All of this role&apos;s actions are shown. The backend enforces the
+              current phase, role and player status — force the right phase first
+              if an action is rejected.
+            </p>
+          </TabsContent>
+
+          {/* ── Activity ── */}
+          <TabsContent value="activity" className="pt-3">
+            <ScrollArea className="h-[320px] pr-2">
+              {playerEvents.length === 0 ? (
+                <div className="text-center text-sm text-muted-foreground py-8">
+                  No activity recorded for this player yet.
+                </div>
+              ) : (
+                <ol className="space-y-2">
+                  {playerEvents.map(e => {
+                    const r = renderEvent(e, players)
+                    const Icon = r.icon
+                    return (
+                      <li key={e.id} className="flex items-start gap-2 text-sm">
+                        <Icon className={`h-4 w-4 mt-0.5 shrink-0 ${r.color}`} />
+                        <div className="min-w-0">
+                          <div className="leading-snug">{r.message}</div>
+                          <span className="text-[10px] font-mono text-muted-foreground">
+                            Day {e.dayNumber} · {formatTime(e.occurredAtMs)}
+                          </span>
+                        </div>
+                      </li>
+                    )
+                  })}
+                </ol>
+              )}
+            </ScrollArea>
+          </TabsContent>
+
+          {/* ── Notifications ── */}
+          <TabsContent value="notifs" className="pt-3">
+            <ScrollArea className="h-[320px] pr-2">
+              {!notifications || notifications.length === 0 ? (
+                <div className="text-center text-sm text-muted-foreground py-8">
+                  No notifications sent to this player yet.
+                </div>
+              ) : (
+                <ol className="space-y-2">
+                  {notifications.map(n => (
+                    <li key={n.id} className="rounded border border-border p-2">
+                      <div className="flex items-center gap-2">
+                        <Bell className="h-3.5 w-3.5 text-primary shrink-0" />
+                        <span className="text-sm font-medium">{n.title}</span>
+                      </div>
+                      <p className="text-sm text-muted-foreground mt-0.5">{n.body}</p>
+                      <span className="text-[10px] font-mono text-muted-foreground">
+                        {new Date(n.sentAtMs).toLocaleString()}
+                      </span>
+                    </li>
+                  ))}
+                </ol>
+              )}
+            </ScrollArea>
+          </TabsContent>
+        </Tabs>
+      </DialogContent>
+    </Dialog>
   )
 }
 
@@ -553,7 +787,10 @@ export default function GameDetailPage({ params }: { params: Promise<{ gameId: s
   const router = useRouter()
   const isConfigured = typeof window !== 'undefined' && getApiConfig() !== null
 
-  const { data: game, isLoading: gameLoading } = useSWR<Game>(
+  const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null)
+  const [playerDialogOpen, setPlayerDialogOpen] = useState(false)
+
+  const { data: game, isLoading: gameLoading, mutate: mutateGame } = useSWR<Game>(
     isConfigured ? `/api/games/${gameId}` : null,
     () => getGame(gameId),
     { refreshInterval: 5000 }
@@ -611,7 +848,8 @@ export default function GameDetailPage({ params }: { params: Promise<{ gameId: s
             Back
           </Link>
         </Button>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
+          {game.name && <h1 className="text-lg font-bold mr-1">{game.name}</h1>}
           <GameIdChip id={game.id} />
           <StatusBadge status={game.status} />
           {game.status === 'ACTIVE' && <PhaseIndicator phase={game.phase} />}
@@ -650,6 +888,7 @@ export default function GameDetailPage({ params }: { params: Promise<{ gameId: s
                 players={players}
                 isLoading={playersLoading}
                 showVotes={game.phase === 'Morning'}
+                onPlayerClick={(p) => { setSelectedPlayer(p); setPlayerDialogOpen(true) }}
               />
             </CardContent>
           </Card>
@@ -667,9 +906,23 @@ export default function GameDetailPage({ params }: { params: Promise<{ gameId: s
           <AddPlayerSection gameId={gameId} onSuccess={() => mutatePlayers()} />
           <AddStepsSection gameId={gameId} players={players} onSuccess={() => mutatePlayers()} />
           <SubmitActionSection gameId={gameId} players={players} />
-          <AdminOverridesSection gameId={gameId} />
+          <AdminOverridesSection
+            gameId={gameId}
+            game={game}
+            onChanged={() => { mutateGame(); mutatePlayers() }}
+          />
         </div>
       </div>
+
+      {/* Per-player control panel */}
+      <PlayerControlDialog
+        gameId={gameId}
+        player={selectedPlayer}
+        players={players}
+        open={playerDialogOpen}
+        onOpenChange={setPlayerDialogOpen}
+        onActed={() => { mutatePlayers(); mutateGame() }}
+      />
     </div>
   )
 }

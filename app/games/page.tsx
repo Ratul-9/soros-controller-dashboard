@@ -7,6 +7,11 @@ import { getGames, getApiConfig, createGame, type Game } from '@/lib/api'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+} from '@/components/ui/dialog'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Progress } from '@/components/ui/progress'
 import { GameIdChip } from '@/components/dashboard/game-id-chip'
@@ -22,13 +27,17 @@ function GameCard({ game }: { game: Game }) {
   return (
     <Card className="bg-card border-border hover:border-primary/30 transition-colors">
       <CardContent className="p-5">
-        <div className="flex items-start justify-between mb-4">
+        <div className="flex items-start justify-between mb-2">
           <GameIdChip id={game.id} />
           <div className="flex items-center gap-2">
             <StatusBadge status={game.status} />
             {game.status === 'ACTIVE' && <PhaseIndicator phase={game.phase} />}
           </div>
         </div>
+
+        {game.name && (
+          <h3 className="text-base font-semibold mb-3 truncate">{game.name}</h3>
+        )}
 
         <div className="space-y-4">
           {/* Player Progress */}
@@ -104,8 +113,10 @@ function EmptyState({ filter }: { filter: string }) {
 
 export default function GamesPage() {
   const [isCreating, setIsCreating] = useState(false)
+  const [createOpen, setCreateOpen] = useState(false)
+  const [newName, setNewName] = useState('')
   const isConfigured = typeof window !== 'undefined' && getApiConfig() !== null
-  
+
   const { data: games, isLoading, mutate } = useSWR<Game[]>(
     isConfigured ? '/api/games' : null,
     () => getGames(),
@@ -115,10 +126,14 @@ export default function GamesPage() {
   const handleCreateGame = async () => {
     setIsCreating(true)
     try {
-      const newGame = await createGame()
+      const newGame = await createGame(newName.trim())
       toast.success('Game Created', {
-        description: `Game ${newGame.id.slice(0, 8)}... is ready in the lobby`,
+        description: newName.trim()
+          ? `"${newName.trim()}" is ready in the lobby`
+          : `Game ${newGame.id.slice(0, 8)}... is ready in the lobby`,
       })
+      setCreateOpen(false)
+      setNewName('')
       mutate()
     } catch (error) {
       toast.error('Failed to create game', {
@@ -153,20 +168,46 @@ export default function GamesPage() {
             Manage and monitor all game sessions
           </p>
         </div>
-        <Button onClick={handleCreateGame} disabled={isCreating}>
-          {isCreating ? (
-            <>
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              Creating...
-            </>
-          ) : (
-            <>
-              <Plus className="h-4 w-4 mr-2" />
-              Create Game
-            </>
-          )}
+        <Button onClick={() => setCreateOpen(true)}>
+          <Plus className="h-4 w-4 mr-2" />
+          Create Game
         </Button>
       </div>
+
+      {/* Create-game dialog (asks for a name) */}
+      <Dialog open={createOpen} onOpenChange={(o) => !isCreating && setCreateOpen(o)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Create Game</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2 py-2">
+            <Label htmlFor="game-name">Game name</Label>
+            <Input
+              id="game-name"
+              placeholder="e.g. Friday Night Match"
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter' && !isCreating) handleCreateGame() }}
+              autoFocus
+            />
+            <p className="text-xs text-muted-foreground">
+              Optional — leave blank for an unnamed game.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="secondary" onClick={() => setCreateOpen(false)} disabled={isCreating}>
+              Cancel
+            </Button>
+            <Button onClick={handleCreateGame} disabled={isCreating}>
+              {isCreating ? (
+                <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Creating...</>
+              ) : (
+                <><Plus className="h-4 w-4 mr-2" />Create</>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Tabs */}
       <Tabs defaultValue="all" className="w-full">

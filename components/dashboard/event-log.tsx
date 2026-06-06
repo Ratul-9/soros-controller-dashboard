@@ -56,7 +56,7 @@ function nameForUser(players: Player[] | undefined, uid: unknown): string | null
 }
 
 // Convert one event → renderable bits.
-function renderEvent(e: GameEvent, players: Player[] | undefined): RenderedEvent {
+export function renderEvent(e: GameEvent, players: Player[] | undefined): RenderedEvent {
   const p = e.payload as Record<string, unknown>
 
   const playerName = (p.playerName as string | undefined) ?? 'A player'
@@ -346,7 +346,7 @@ function renderEvent(e: GameEvent, players: Player[] | undefined): RenderedEvent
   }
 }
 
-function formatTime(ms: number): string {
+export function formatTime(ms: number): string {
   if (!ms) return ''
   const d = new Date(ms)
   return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
