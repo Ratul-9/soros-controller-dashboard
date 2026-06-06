@@ -12,6 +12,7 @@ import {
   submitAction,
   addStepsToPlayer,
   forcePhase,
+  deleteGame,
   getEvents,
   getPlayerNotifications,
   type Game,
@@ -31,6 +32,11 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog'
+import {
+  AlertDialog, AlertDialogTrigger, AlertDialogContent, AlertDialogHeader,
+  AlertDialogTitle, AlertDialogDescription, AlertDialogFooter,
+  AlertDialogCancel, AlertDialogAction,
+} from '@/components/ui/alert-dialog'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -55,6 +61,7 @@ import {
   Clock,
   Bell,
   Activity,
+  Trash2,
   Loader2
 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -559,7 +566,7 @@ function AdminOverridesSection({ gameId, game, onChanged }: { gameId: string; ga
             <Button variant="outline" size="sm" disabled={!isActive || forcing !== null}
               onClick={() => handleForcePhase('NightResolution')}>
               {forcing === 'NightResolution' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Clock className="h-4 w-4 mr-1" />}
-              Resolve
+              Compute
             </Button>
           </div>
           <p className="text-[10px] text-muted-foreground text-center">
@@ -568,6 +575,72 @@ function AdminOverridesSection({ gameId, game, onChanged }: { gameId: string; ga
               : 'Game must be Active to force phases.'}
           </p>
         </div>
+      </CardContent>
+    </Card>
+  )
+}
+
+// ── Danger zone: force-delete the game from memory + database ────────────────
+function DangerZoneSection({ gameId, game, onDeleted }: { gameId: string; game: Game; onDeleted: () => void }) {
+  const [deleting, setDeleting] = useState(false)
+
+  const handleDelete = async () => {
+    setDeleting(true)
+    try {
+      await deleteGame(gameId)
+      toast.success('Game deleted', {
+        description: 'Removed from memory and the database.',
+      })
+      onDeleted()
+    } catch (error) {
+      toast.error('Failed to delete game', {
+        description: error instanceof Error ? error.message : 'Unknown error',
+      })
+      setDeleting(false)
+    }
+  }
+
+  return (
+    <Card className="bg-destructive/5 border-destructive/40">
+      <CardHeader className="pb-3">
+        <CardTitle className="text-sm flex items-center gap-2 text-destructive">
+          <AlertTriangle className="h-4 w-4" />
+          Danger Zone
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <AlertDialog>
+          <AlertDialogTrigger asChild>
+            <Button variant="destructive" size="sm" className="w-full" disabled={deleting}>
+              {deleting
+                ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Deleting…</>
+                : <><Trash2 className="h-4 w-4 mr-2" />Force Delete Game</>}
+            </Button>
+          </AlertDialogTrigger>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Force delete this game?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This permanently removes{' '}
+                <span className="font-semibold">{game.name || gameId.slice(0, 8)}</span>{' '}
+                from memory <span className="font-semibold">and the database</span> —
+                players, events, votes and notifications are all erased. This cannot be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={handleDelete}
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              >
+                Delete forever
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+        <p className="text-[10px] text-muted-foreground text-center mt-2">
+          Stops the game and wipes it everywhere. Irreversible.
+        </p>
       </CardContent>
     </Card>
   )
@@ -910,6 +983,11 @@ export default function GameDetailPage({ params }: { params: Promise<{ gameId: s
             gameId={gameId}
             game={game}
             onChanged={() => { mutateGame(); mutatePlayers() }}
+          />
+          <DangerZoneSection
+            gameId={gameId}
+            game={game}
+            onDeleted={() => router.push('/games')}
           />
         </div>
       </div>

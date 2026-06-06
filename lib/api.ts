@@ -146,7 +146,9 @@ const PHASE_MAP: Record<string, Game['phase']> = {
   PRE_GAME:         'PreGame',
   MORNING:          'Morning',
   NIGHT:            'Night',
-  NIGHT_RESOLUTION: 'NightResolution',
+  // Night-Resolution is an internal midnight compute step — show it as Night
+  // so the dashboard only displays Day / Night (matches the player view).
+  NIGHT_RESOLUTION: 'Night',
   POST_GAME:        'PostGame',
 }
 
@@ -381,6 +383,11 @@ export async function getPlayerNotifications(
     `/api/games/${gameId}/players/${playerId}/notifications`
   )
   return res.notifications ?? []
+}
+
+// Force-delete a game from memory AND the database (irreversible).
+export async function deleteGame(gameId: string): Promise<void> {
+  await apiFetch(`/api/games/${gameId}`, { method: 'DELETE' })
 }
 
 export async function getPlayers(gameId: string): Promise<Player[]> {
