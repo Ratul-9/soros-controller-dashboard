@@ -83,43 +83,49 @@ function ActiveGamesTable({ games, isLoading }: { games: Game[] | undefined; isL
   }
 
   return (
-    <Table>
-      <TableHeader>
-        <TableRow className="border-border hover:bg-transparent">
-          <TableHead className="text-muted-foreground">Game ID</TableHead>
-          <TableHead className="text-muted-foreground">Phase</TableHead>
-          <TableHead className="text-muted-foreground">Day</TableHead>
-          <TableHead className="text-muted-foreground">Players</TableHead>
-          <TableHead className="text-muted-foreground text-right">Actions</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {activeGames.map((game) => (
-          <TableRow key={game.id} className="border-border hover:bg-secondary/50">
-            <TableCell>
-              <GameIdChip id={game.id} />
-            </TableCell>
-            <TableCell>
-              <PhaseIndicator phase={game.phase} />
-            </TableCell>
-            <TableCell>
-              <span className="font-mono text-sm">Day {game.day}</span>
-            </TableCell>
-            <TableCell>
-              <span className="font-mono text-sm">{game.players}/{game.maxPlayers}</span>
-            </TableCell>
-            <TableCell className="text-right">
-              <Button variant="ghost" size="sm" asChild>
-                <Link href={`/games/${game.id}`}>
-                  <Eye className="h-4 w-4 mr-1" />
-                  View
-                </Link>
-              </Button>
-            </TableCell>
+    <div className="overflow-x-auto">
+      <Table>
+        <TableHeader>
+          <TableRow className="border-border hover:bg-transparent">
+            <TableHead className="text-muted-foreground min-w-[200px]">Game Name</TableHead>
+            <TableHead className="text-muted-foreground min-w-[120px]">Game ID</TableHead>
+            <TableHead className="text-muted-foreground min-w-[100px]">Phase</TableHead>
+            <TableHead className="text-muted-foreground min-w-[80px]">Day</TableHead>
+            <TableHead className="text-muted-foreground min-w-[100px]">Players</TableHead>
+            <TableHead className="text-muted-foreground text-right min-w-[80px]">Actions</TableHead>
           </TableRow>
-        ))}
-      </TableBody>
-    </Table>
+        </TableHeader>
+        <TableBody>
+          {activeGames.map((game) => (
+            <TableRow key={game.id} className="border-border hover:bg-secondary/50">
+              <TableCell>
+                <span className="font-medium">{game.name || `Game ${game.id.substring(0, 8)}`}</span>
+              </TableCell>
+              <TableCell>
+                <GameIdChip id={game.id} />
+              </TableCell>
+              <TableCell>
+                <PhaseIndicator phase={game.phase} />
+              </TableCell>
+              <TableCell>
+                <span className="font-mono text-sm">Day {game.day}</span>
+              </TableCell>
+              <TableCell>
+                <span className="font-mono text-sm">{game.players}/{game.maxPlayers}</span>
+              </TableCell>
+              <TableCell className="text-right">
+                <Button variant="ghost" size="sm" asChild>
+                  <Link href={`/games/${game.id}`}>
+                    <Eye className="h-4 w-4 mr-1" />
+                    View
+                  </Link>
+                </Button>
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
   )
 }
 
@@ -144,7 +150,7 @@ export default function OverviewPage() {
     .reduce((sum, g) => sum + g.players, 0) || 0
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 w-full">
       {/* Page Header */}
       <div>
         <h1 className="text-2xl font-bold">Overview</h1>
@@ -154,7 +160,7 @@ export default function OverviewPage() {
       </div>
 
       {/* Stat Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 w-full">
         <StatCard
           title="Lobby Games"
           value={status?.games.lobby ?? '-'}
@@ -186,18 +192,20 @@ export default function OverviewPage() {
         />
       </div>
 
-      {/* Active Games Table */}
-      <Card className="bg-card border-border">
-        <CardHeader className="border-b border-border">
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-lg">Active Games</CardTitle>
-            <span className="text-xs text-muted-foreground">Auto-refreshes every 10s</span>
-          </div>
-        </CardHeader>
-        <CardContent className="p-0">
-          <ActiveGamesTable games={games} isLoading={gamesLoading} />
-        </CardContent>
-      </Card>
+      {/* Active Games Table - Full Width */}
+      <div className="w-full">
+        <Card className="bg-card border-border w-full">
+          <CardHeader className="border-b border-border">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-lg">Active Games</CardTitle>
+              <span className="text-xs text-muted-foreground">Auto-refreshes every 10s</span>
+            </div>
+          </CardHeader>
+          <CardContent className="p-0 w-full">
+            <ActiveGamesTable games={games} isLoading={gamesLoading} />
+          </CardContent>
+        </Card>
+      </div>
     </div>
   )
 }

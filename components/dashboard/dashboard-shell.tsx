@@ -32,7 +32,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
           <Sidebar />
           <Header />
           <main className="ml-64 pt-16 min-h-screen">
-            <div className="p-6">
+            <div className="px-6 py-6 w-full">
               {children}
             </div>
           </main>
