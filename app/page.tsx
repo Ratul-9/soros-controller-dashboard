@@ -2,14 +2,14 @@
 
 import useSWR from 'swr'
 import Link from 'next/link'
-import { getStatus, getGames, getApiConfig, type Game, type ServerStatus } from '@/lib/api'
+import { getStatus, getGames, getApiConfig, getEvents, type Game, type ServerStatus, type GameEvent } from '@/lib/api'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { GameIdChip } from '@/components/dashboard/game-id-chip'
 import { PhaseIndicator } from '@/components/dashboard/phase-indicator'
-import { Users, Gamepad2, Clock, Trophy, Eye } from 'lucide-react'
+import { Users, Gamepad2, Clock, Trophy, Eye, Activity } from 'lucide-react'
 
 function StatCard({ 
   title, 
@@ -57,6 +57,67 @@ function StatCard({
         </div>
       </CardContent>
     </Card>
+  )
+}
+
+function RecentActivityFeed({ events, isLoading }: { events: GameEvent[] | undefined; isLoading: boolean }) {
+  const formatEventType = (type: string): string => {
+    const typeMap: Record<string, string> = {
+      'CastVote': 'Voted',
+      'MafiaKillTarget': 'Kill targeted',
+      'DoctorSave': 'Saved',
+      'DetectiveInquire': 'Investigated',
+      'BodyguardProtect': 'Protected',
+      'SilencerSilence': 'Silenced',
+      'RevealAsMayor': 'Revealed as Mayor',
+      'PlayerEliminated': 'Eliminated',
+      'PhaseChanged': 'Phase changed',
+    }
+    return typeMap[type] || type
+  }
+
+  if (isLoading) {
+    return (
+      <div className="space-y-3">
+        {[...Array(5)].map((_, i) => (
+          <Skeleton key={i} className="h-12 w-full" />
+        ))}
+      </div>
+    )
+  }
+
+  const displayEvents = events?.slice(0, 20) || []
+
+  if (displayEvents.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+        <Activity className="h-12 w-12 mb-3 opacity-50" />
+        <p className="text-sm">No recent activity</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-2">
+      {displayEvents.map((event) => (
+        <div key={event.id} className="flex items-center justify-between p-3 bg-secondary/30 rounded-lg border border-border">
+          <div className="flex-1">
+            <p className="text-sm font-medium">
+              <span className="text-primary">{formatEventType(event.type)}</span>
+              <span className="text-muted-foreground text-xs ml-2">
+                Day {event.dayNumber}
+              </span>
+            </p>
+            <p className="text-xs text-muted-foreground mt-1">
+              {event.visibility === 'Public' ? '🌐 Public' : '🔒 Private'}
+            </p>
+          </div>
+          <span className="text-xs text-muted-foreground whitespace-nowrap ml-2">
+            {new Date(event.occurredAtMs).toLocaleTimeString()}
+          </span>
+        </div>
+      ))}
+    </div>
   )
 }
 
@@ -131,23 +192,34 @@ function ActiveGamesTable({ games, isLoading }: { games: Game[] | undefined; isL
 
 export default function OverviewPage() {
   const isConfigured = typeof window !== 'undefined' && getApiConfig() !== null
-  
+
   const { data: status, isLoading: statusLoading } = useSWR<ServerStatus>(
     isConfigured ? '/api/status' : null,
     () => getStatus(),
     { refreshInterval: 10000 }
   )
-  
+
   const { data: games, isLoading: gamesLoading } = useSWR<Game[]>(
     isConfigured ? '/api/games' : null,
     () => getGames(),
     { refreshInterval: 10000 }
   )
 
+  // Fetch events for first active game
+  const activeGameId = games?.find(g => g.status === 'ACTIVE')?.id
+  const { data: events, isLoading: eventsLoading } = useSWR<GameEvent[]>(
+    isConfigured && activeGameId ? `/api/games/${activeGameId}/events` : null,
+    () => activeGameId ? getEvents(activeGameId, { limit: 100 }) : Promise.resolve([]),
+    { refreshInterval: 5000 }
+  )
+
   // Calculate total players across active games
   const totalPlayers = games
     ?.filter(g => g.status === 'ACTIVE')
     .reduce((sum, g) => sum + g.players, 0) || 0
+
+  // Sort events by time (newest first)
+  const sortedEvents = events?.sort((a, b) => b.occurredAtMs - a.occurredAtMs) || []
 
   return (
     <div className="space-y-6 w-full">
@@ -203,6 +275,24 @@ export default function OverviewPage() {
           </CardHeader>
           <CardContent className="p-0 w-full">
             <ActiveGamesTable games={games} isLoading={gamesLoading} />
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Recent Activity Feed */}
+      <div className="w-full">
+        <Card className="bg-card border-border w-full">
+          <CardHeader className="border-b border-border">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Activity className="h-5 w-5 text-primary" />
+                <CardTitle className="text-lg">Recent Activity</CardTitle>
+              </div>
+              <span className="text-xs text-muted-foreground">Auto-refreshes every 5s</span>
+            </div>
+          </CardHeader>
+          <CardContent className="p-4 w-full">
+            <RecentActivityFeed events={sortedEvents} isLoading={eventsLoading} />
           </CardContent>
         </Card>
       </div>
