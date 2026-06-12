@@ -75,9 +75,21 @@ export interface Player {
   status: 'Alive' | 'Eliminated' | 'Resurrected' | 'DeadForever'
   lifetimeSteps: number
   activeSteps: number
+  stepsToday: number      // steps since this morning — powers gate on this
+  isSilenced: boolean     // silenced for the current morning
   mayorRevealed: boolean
   votesReceived: number
   votersAgainstMe: VoterEntry[]
+}
+
+// One submitted power/vote action (from the night_actions audit log).
+export interface PlayerAction {
+  id: number
+  type: string
+  dayNumber: number
+  targetPlayerId?: string
+  targetPlayerName?: string
+  submittedAtMs: number
 }
 
 export interface GameTally {
@@ -205,9 +217,32 @@ interface RawPlayer {
   status: string
   lifetimeSteps: number
   activeSteps: number
+  stepsToday?: number
+  isSilenced?: boolean
   mayorRevealed: boolean
   votesReceived: number
   votersAgainstMe: { userId: number; name: string }[]
+}
+
+function mapPlayer(p: RawPlayer): Player {
+  return {
+    id:            p.id,
+    userId:        String(p.userId),
+    name:          p.displayName,
+    role:          p.role != null ? (ROLE_MAP[p.role] ?? null) : null,
+    faction:       (p.faction as Player['faction']) ?? null,
+    status:        PLAYER_STATUS_MAP[p.status] ?? p.status as Player['status'],
+    lifetimeSteps:    p.lifetimeSteps,
+    activeSteps:      p.activeSteps,
+    stepsToday:       p.stepsToday ?? 0,
+    isSilenced:       p.isSilenced ?? false,
+    mayorRevealed:    p.mayorRevealed,
+    votesReceived:    p.votesReceived ?? 0,
+    votersAgainstMe:  (p.votersAgainstMe ?? []).map(v => ({
+      userId: String(v.userId),
+      name:   v.name,
+    })),
+  }
 }
 
 // Maps dashboard ActionType → backend action type string
@@ -392,24 +427,26 @@ export async function deleteGame(gameId: string): Promise<void> {
 
 export async function getPlayers(gameId: string): Promise<Player[]> {
   const res = await apiFetch<{ gameId: string; players: RawPlayer[] }>(`/api/games/${gameId}/players`)
-  return res.players
-    .map(p => ({
-      id:            p.id,
-      userId:        String(p.userId),
-      name:          p.displayName,
-      role:          p.role != null ? (ROLE_MAP[p.role] ?? null) : null,
-      faction:       (p.faction as Player['faction']) ?? null,
-      status:        PLAYER_STATUS_MAP[p.status] ?? p.status as Player['status'],
-      lifetimeSteps:    p.lifetimeSteps,
-      activeSteps:      p.activeSteps,
-      mayorRevealed:    p.mayorRevealed,
-      votesReceived:    p.votesReceived ?? 0,
-      votersAgainstMe:  (p.votersAgainstMe ?? []).map(v => ({
-        userId: String(v.userId),
-        name:   v.name,
-      })),
-    }))
-    .sort((a, b) => a.id.localeCompare(b.id))
+  return res.players.map(mapPlayer).sort((a, b) => a.id.localeCompare(b.id))
+}
+
+// Full admin detail for one player.
+export async function getPlayer(gameId: string, playerId: string): Promise<Player> {
+  const res = await apiFetch<{ gameId: string; player: RawPlayer }>(
+    `/api/games/${gameId}/players/${playerId}`
+  )
+  return mapPlayer(res.player)
+}
+
+// Every power/vote action this player submitted, newest first.
+export async function getPlayerActions(
+  gameId: string,
+  playerId: string
+): Promise<PlayerAction[]> {
+  const res = await apiFetch<{ gameId: string; playerId: string; actions: PlayerAction[] }>(
+    `/api/games/${gameId}/players/${playerId}/actions`
+  )
+  return res.actions ?? []
 }
 
 interface RawTally {

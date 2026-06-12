@@ -13,31 +13,21 @@ import {
   addStepsToPlayer,
   forcePhase,
   deleteGame,
-  getEvents,
-  getPlayerNotifications,
   type Game,
   type Player,
   type GameTally,
   type ActionType,
-  type GameEvent,
-  type PlayerNotification,
 } from '@/lib/api'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Badge } from '@/components/ui/badge'
-import { ScrollArea } from '@/components/ui/scroll-area'
-import {
-  Dialog, DialogContent, DialogHeader, DialogTitle,
-} from '@/components/ui/dialog'
 import {
   AlertDialog, AlertDialogTrigger, AlertDialogContent, AlertDialogHeader,
   AlertDialogTitle, AlertDialogDescription, AlertDialogFooter,
   AlertDialogCancel, AlertDialogAction,
 } from '@/components/ui/alert-dialog'
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
@@ -48,7 +38,7 @@ import { RoleBadge } from '@/components/dashboard/role-badge'
 import { FactionBadge } from '@/components/dashboard/faction-badge'
 import { PlayerStatusBadge } from '@/components/dashboard/player-status-badge'
 import { WinnerBadge } from '@/components/dashboard/winner-badge'
-import { EventLog, renderEvent, formatTime } from '@/components/dashboard/event-log'
+import { EventLog } from '@/components/dashboard/event-log'
 import {
   ArrowLeft,
   Footprints,
@@ -59,8 +49,6 @@ import {
   Sun,
   Moon,
   Clock,
-  Bell,
-  Activity,
   Trash2,
   Loader2
 } from 'lucide-react'
@@ -163,6 +151,7 @@ function PlayersTable({ players, isLoading, showVotes, onPlayerClick }: { player
           <TableHead className="text-muted-foreground">Faction</TableHead>
           <TableHead className="text-muted-foreground">Status</TableHead>
           <TableHead className="text-muted-foreground">Steps</TableHead>
+          <TableHead className="text-muted-foreground">Today</TableHead>
           {showVotes && <TableHead className="text-muted-foreground">Votes Against</TableHead>}
         </TableRow>
       </TableHeader>
@@ -190,6 +179,14 @@ function PlayersTable({ players, isLoading, showVotes, onPlayerClick }: { player
                 <span className="inline-flex items-center gap-1 font-mono text-sm">
                   <Footprints className="h-4 w-4 text-muted-foreground" />
                   {player.lifetimeSteps}
+                </span>
+              </TableCell>
+              <TableCell>
+                <span className={cn(
+                  "font-mono text-sm",
+                  player.stepsToday >= 6000 ? "text-active font-semibold" : "text-muted-foreground"
+                )}>
+                  {player.stepsToday.toLocaleString()}
                 </span>
               </TableCell>
               {showVotes && (
@@ -646,222 +643,10 @@ function DangerZoneSection({ gameId, game, onDeleted }: { gameId: string; game: 
   )
 }
 
-// ── Per-player control panel (click a player row to open) ───────────────────
-function PlayerControlDialog({
-  gameId, player, players, open, onOpenChange, onActed,
-}: {
-  gameId: string
-  player: Player | null
-  players: Player[] | undefined
-  open: boolean
-  onOpenChange: (o: boolean) => void
-  onActed: () => void
-}) {
-  const [actionType, setActionType] = useState<ActionType | ''>('')
-  const [targetId, setTargetId] = useState('')
-  const [isSubmitting, setIsSubmitting] = useState(false)
-
-  // Activity + notification logs — only fetched while the dialog is open.
-  const { data: events } = useSWR<GameEvent[]>(
-    open && player ? `/api/games/${gameId}/events#${player.id}` : null,
-    () => getEvents(gameId, { limit: 500 }),
-    { refreshInterval: 4000 }
-  )
-  const { data: notifications } = useSWR<PlayerNotification[]>(
-    open && player ? `/api/games/${gameId}/players/${player.id}/notifications` : null,
-    () => getPlayerNotifications(gameId, player!.id),
-    { refreshInterval: 5000 }
-  )
-
-  if (!player) return null
-
-  const available = actionsForPlayer(player)
-  const selected = available.find(a => a.value === actionType)
-  const needsTarget = selected?.needsTarget ?? false
-
-  // Events that involve this player (as actor target or subject).
-  const uid = Number(player.userId)
-  const playerEvents = (events ?? []).filter(e => {
-    if (e.targetUserId === uid) return true
-    const p = e.payload as Record<string, unknown>
-    return (
-      p.playerId === player.id ||
-      p.playerName === player.name ||
-      p.targetPlayerName === player.name ||
-      p.inquiredAboutPlayerName === player.name
-    )
-  })
-
-  const handlePerform = async () => {
-    if (!actionType) return
-    setIsSubmitting(true)
-    try {
-      await submitAction(
-        gameId,
-        player.id,
-        actionType,
-        needsTarget && targetId ? targetId : undefined
-      )
-      toast.success('Action submitted', {
-        description: `${player.name}: ${selected?.label}. The backend validates phase/role/status; refresh to see the result.`,
-      })
-      setActionType('')
-      setTargetId('')
-      onActed()
-    } catch (error) {
-      toast.error('Failed to submit action', {
-        description: error instanceof Error ? error.message : 'Unknown error',
-      })
-    } finally {
-      setIsSubmitting(false)
-    }
-  }
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 flex-wrap">
-            <span>{player.name}</span>
-            <RoleBadge role={player.role} />
-            <FactionBadge faction={player.faction} />
-            <PlayerStatusBadge status={player.status} />
-          </DialogTitle>
-        </DialogHeader>
-
-        <div className="flex items-center gap-3 text-xs text-muted-foreground">
-          <span className="inline-flex items-center gap-1 font-mono">
-            <Footprints className="h-3.5 w-3.5" />
-            {player.lifetimeSteps.toLocaleString()} steps
-          </span>
-          <span className="font-mono">id {player.id.slice(0, 10)}…</span>
-        </div>
-
-        <Tabs defaultValue="actions" className="mt-2">
-          <TabsList className="grid grid-cols-3 w-full">
-            <TabsTrigger value="actions"><Zap className="h-3.5 w-3.5 mr-1" />Actions</TabsTrigger>
-            <TabsTrigger value="activity"><Activity className="h-3.5 w-3.5 mr-1" />Activity</TabsTrigger>
-            <TabsTrigger value="notifs"><Bell className="h-3.5 w-3.5 mr-1" />Notifications</TabsTrigger>
-          </TabsList>
-
-          {/* ── Actions ── */}
-          <TabsContent value="actions" className="space-y-3 pt-3">
-            <div className="space-y-2">
-              <Label className="text-xs text-muted-foreground">
-                Action ({player.role ?? 'no role yet'})
-              </Label>
-              <Select value={actionType} onValueChange={(v) => { setActionType(v as ActionType); setTargetId('') }}>
-                <SelectTrigger className="bg-secondary border-border">
-                  <SelectValue placeholder="Choose what this player does" />
-                </SelectTrigger>
-                <SelectContent>
-                  {available.map(a => (
-                    <SelectItem key={a.value} value={a.value}>{a.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {needsTarget && (
-              <div className="space-y-2">
-                <Label className="text-xs text-muted-foreground">Target player</Label>
-                <Select value={targetId} onValueChange={setTargetId}>
-                  <SelectTrigger className="bg-secondary border-border">
-                    <SelectValue placeholder="Select target" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {players?.filter(p => p.id !== player.id).map(p => (
-                      <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-
-            <Button
-              className="w-full"
-              size="sm"
-              disabled={!actionType || (needsTarget && !targetId) || isSubmitting}
-              onClick={handlePerform}
-            >
-              {isSubmitting
-                ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Submitting…</>
-                : <>Perform{selected ? `: ${selected.label}` : ''}</>}
-            </Button>
-            <p className="text-[10px] text-muted-foreground">
-              All of this role&apos;s actions are shown. The backend enforces the
-              current phase, role and player status — force the right phase first
-              if an action is rejected.
-            </p>
-          </TabsContent>
-
-          {/* ── Activity ── */}
-          <TabsContent value="activity" className="pt-3">
-            <ScrollArea className="h-[320px] pr-2">
-              {playerEvents.length === 0 ? (
-                <div className="text-center text-sm text-muted-foreground py-8">
-                  No activity recorded for this player yet.
-                </div>
-              ) : (
-                <ol className="space-y-2">
-                  {playerEvents.map(e => {
-                    const r = renderEvent(e, players)
-                    const Icon = r.icon
-                    return (
-                      <li key={e.id} className="flex items-start gap-2 text-sm">
-                        <Icon className={`h-4 w-4 mt-0.5 shrink-0 ${r.color}`} />
-                        <div className="min-w-0">
-                          <div className="leading-snug">{r.message}</div>
-                          <span className="text-[10px] font-mono text-muted-foreground">
-                            Day {e.dayNumber} · {formatTime(e.occurredAtMs)}
-                          </span>
-                        </div>
-                      </li>
-                    )
-                  })}
-                </ol>
-              )}
-            </ScrollArea>
-          </TabsContent>
-
-          {/* ── Notifications ── */}
-          <TabsContent value="notifs" className="pt-3">
-            <ScrollArea className="h-[320px] pr-2">
-              {!notifications || notifications.length === 0 ? (
-                <div className="text-center text-sm text-muted-foreground py-8">
-                  No notifications sent to this player yet.
-                </div>
-              ) : (
-                <ol className="space-y-2">
-                  {notifications.map(n => (
-                    <li key={n.id} className="rounded border border-border p-2">
-                      <div className="flex items-center gap-2">
-                        <Bell className="h-3.5 w-3.5 text-primary shrink-0" />
-                        <span className="text-sm font-medium">{n.title}</span>
-                      </div>
-                      <p className="text-sm text-muted-foreground mt-0.5">{n.body}</p>
-                      <span className="text-[10px] font-mono text-muted-foreground">
-                        {new Date(n.sentAtMs).toLocaleString()}
-                      </span>
-                    </li>
-                  ))}
-                </ol>
-              )}
-            </ScrollArea>
-          </TabsContent>
-        </Tabs>
-      </DialogContent>
-    </Dialog>
-  )
-}
-
 export default function GameDetailPage({ params }: { params: Promise<{ gameId: string }> }) {
   const { gameId } = use(params)
   const router = useRouter()
   const isConfigured = typeof window !== 'undefined' && getApiConfig() !== null
-
-  const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null)
-  const [playerDialogOpen, setPlayerDialogOpen] = useState(false)
 
   const { data: game, isLoading: gameLoading, mutate: mutateGame } = useSWR<Game>(
     isConfigured ? `/api/games/${gameId}` : null,
@@ -961,7 +746,7 @@ export default function GameDetailPage({ params }: { params: Promise<{ gameId: s
                 players={players}
                 isLoading={playersLoading}
                 showVotes={game.phase === 'Morning'}
-                onPlayerClick={(p) => { setSelectedPlayer(p); setPlayerDialogOpen(true) }}
+                onPlayerClick={(p) => router.push(`/games/${gameId}/players/${p.id}`)}
               />
             </CardContent>
           </Card>
@@ -991,16 +776,6 @@ export default function GameDetailPage({ params }: { params: Promise<{ gameId: s
           />
         </div>
       </div>
-
-      {/* Per-player control panel */}
-      <PlayerControlDialog
-        gameId={gameId}
-        player={selectedPlayer}
-        players={players}
-        open={playerDialogOpen}
-        onOpenChange={setPlayerDialogOpen}
-        onActed={() => { mutatePlayers(); mutateGame() }}
-      />
     </div>
   )
 }
