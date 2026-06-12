@@ -205,9 +205,19 @@ function PlayerActionControls({ gameId, player, players, onActed }: {
                   <SelectValue placeholder="Select target" />
                 </SelectTrigger>
                 <SelectContent>
-                  {players?.filter(p => p.id !== player.id).map(p => (
-                    <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                  ))}
+                  {/* Self-targeting is legal for votes and the Doctor's save
+                      (first night only — the backend enforces the day rule),
+                      so include the actor themselves for those actions. */}
+                  {players
+                    ?.filter(p =>
+                      p.id !== player.id ||
+                      actionType === 'DOCTOR_SAVE' ||
+                      actionType === 'VOTE')
+                    .map(p => (
+                      <SelectItem key={p.id} value={p.id}>
+                        {p.name}{p.id === player.id ? ' (self)' : ''}
+                      </SelectItem>
+                    ))}
                 </SelectContent>
               </Select>
             </div>

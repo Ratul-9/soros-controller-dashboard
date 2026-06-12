@@ -477,11 +477,18 @@ function SubmitActionSection({ gameId, players }: { gameId: string; players: Pla
                     <SelectValue placeholder="Select target" />
                   </SelectTrigger>
                   <SelectContent>
-                    {players?.filter(p => p.id !== actorId).map((p) => (
-                      <SelectItem key={p.id} value={p.id}>
-                        {p.name}
-                      </SelectItem>
-                    ))}
+                    {/* Doctor may save themselves (first night) and self-votes
+                        are legal — include the actor for those actions. */}
+                    {players
+                      ?.filter(p =>
+                        p.id !== actorId ||
+                        actionType === 'DOCTOR_SAVE' ||
+                        actionType === 'VOTE')
+                      .map((p) => (
+                        <SelectItem key={p.id} value={p.id}>
+                          {p.name}{p.id === actorId ? ' (self)' : ''}
+                        </SelectItem>
+                      ))}
                   </SelectContent>
                 </Select>
               </div>
